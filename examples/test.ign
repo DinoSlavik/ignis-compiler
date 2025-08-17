@@ -1,4 +1,4 @@
-/*// Const declaration
+// Const declaration
 const int VERSION = 1;
 
 /*
@@ -17,13 +17,4 @@ int main() {
     print(result);
 
     return 0;
-}*/
-
-/*int main() {
-    int a = 33;
-    int b = 44;
-
-    print(a + b);
-
-    return 0;
-}*/
+}
