@@ -1,21 +1,25 @@
 from lexer import TokenType
 from ast_nodes import *
 
+
 class Parser:
     def __init__(self, lexer):
         self.lexer = lexer
+        # Initialize two tokens for lookahead
         self.current_token = self.lexer.get_next_token()
+        self.peek_token = self.lexer.get_next_token()
 
     def error(self, message):
         raise Exception(f'Parser error: {message}')
 
     def eat(self, token_type):
         """
-        Consume the current token if it matches the expected type.
+        Consume the current token if it matches the expected type and advance.
         If it doesn't match, raise an error.
         """
         if self.current_token.type == token_type:
-            self.current_token = self.lexer.get_next_token()
+            self.current_token = self.peek_token
+            self.peek_token = self.lexer.get_next_token()
         else:
             self.error(f"Unexpected token: expected {token_type}, got {self.current_token.type}")
 
@@ -34,13 +38,13 @@ class Parser:
             self.eat(TokenType.RPAREN)
             return node
         elif token.type == TokenType.IDENTIFIER:
-            # Could be a variable or a function call
-            if self.lexer.peek() == '(':
+            # Use peek_token to decide if it's a function call or a variable
+            if self.peek_token.type == TokenType.LPAREN:
                 return self.function_call()
             else:
                 self.eat(TokenType.IDENTIFIER)
                 return Var(token)
-        self.error("Invalid factor in expression")
+        self.error(f"Invalid factor in expression. Current token: {token}")
 
     def term(self):
         """
@@ -83,7 +87,7 @@ class Parser:
     def variable_declaration(self):
         """
         Parses a variable declaration.
-        var_declaration : (KW_MUT)? type_spec IDENTIFIER ASSIGN expr SEMICOLON
+        var_declaration : (KW_MUT)? type_spec IDENTIFIER ASSIGN expr
         """
         is_mutable = False
         if self.current_token.type == TokenType.KW_MUT:
@@ -98,13 +102,12 @@ class Parser:
         self.eat(TokenType.ASSIGN)
         assign_node = self.expr()
 
-        node = VarDecl(type_node, var_node, assign_node, is_mutable)
-        return node
+        return VarDecl(type_node, var_node, assign_node, is_mutable)
 
     def constant_declaration(self):
         """
         Parses a constant declaration.
-        const_declaration : KW_CONST type_spec IDENTIFIER ASSIGN expr SEMICOLON
+        const_declaration : KW_CONST type_spec IDENTIFIER ASSIGN expr
         """
         self.eat(TokenType.KW_CONST)
         type_node = self.type_spec()
@@ -120,7 +123,7 @@ class Parser:
     def assignment_statement(self):
         """
         Parses an assignment to an existing variable.
-        assignment_statement : variable ASSIGN expr SEMICOLON
+        assignment_statement : variable ASSIGN expr
         """
         left = Var(self.current_token)
         self.eat(TokenType.IDENTIFIER)
@@ -155,14 +158,14 @@ class Parser:
 
         if token_type in (TokenType.KW_INT, TokenType.KW_MUT):
             node = self.variable_declaration()
-        elif token_type == TokenType.IDENTIFIER and self.lexer.peek() == '=':
+        elif token_type == TokenType.IDENTIFIER and self.peek_token.type == TokenType.ASSIGN:
             node = self.assignment_statement()
-        elif token_type == TokenType.IDENTIFIER and self.lexer.peek() == '(':
+        elif token_type == TokenType.IDENTIFIER and self.peek_token.type == TokenType.LPAREN:
             node = self.function_call()
         elif token_type == TokenType.KW_RETURN:
             node = self.return_statement()
         else:
-            self.error("Invalid statement")
+            self.error(f"Invalid statement. Current token: {self.current_token}")
 
         self.eat(TokenType.SEMICOLON)
         return node
@@ -184,13 +187,10 @@ class Parser:
         """Parses any top-level declaration."""
         if self.current_token.type == TokenType.KW_CONST:
             node = self.constant_declaration()
-            self.eat(TokenType.SEMICOLON)  # Top-level declarations must end with a semicolon
+            self.eat(TokenType.SEMICOLON)
             return node
 
-        # Assume function declaration if it's a type followed by an identifier and parenthesis
         if self.current_token.type == TokenType.KW_INT:
-            # Based on our current grammar, if a top-level declaration
-            # starts with 'int', it must be a function.
             type_node = self.type_spec()
             func_name = self.current_token.value
             self.eat(TokenType.IDENTIFIER)
@@ -199,18 +199,12 @@ class Parser:
             body = self.compound_statement()
             return FunctionDecl(type_node, func_name, body)
 
-        self.error(f"Invalid top-level declaration\n{self.current_token}")
-        #self.error("Invalid top-level declaration")
+        self.error(f"Invalid top-level declaration. Unexpected token: {self.current_token}")
 
     def parse(self):
-        """
-        Main entry point. Parses the entire program.
-        program : (declaration)*
-        """
+        """Main entry point. Parses the entire program."""
         declarations = []
         while self.current_token.type != TokenType.EOF:
             declarations.append(self.declaration())
-            # For now, we only handle one const and one function.
-            # A more robust parser would loop here.
 
         return Program(declarations)
