@@ -23,17 +23,14 @@ class CodeGenerator(NodeVisitor):
         return self.label_counter
 
     def _get_node_type(self, node):
-        """Helper function to determine the type of an AST node."""
-        if isinstance(node, Num):
-            return 'int'
+        if isinstance(node, Num): return 'int'
         if isinstance(node, Var):
             var_name = node.value
             if var_name in self.symbol_table:
                 return self.symbol_table[var_name]['type']
             else:
-                if var_name == "VERSION": return 'int'  # Handle constants
+                if var_name == "VERSION": return 'int'
                 raise Exception(f"Cannot determine type of undeclared variable '{var_name}'")
-        # For now, all expressions resolve to int. This will be expanded later.
         return 'int'
 
     def generate(self, tree):
@@ -64,22 +61,35 @@ class CodeGenerator(NodeVisitor):
             self.assembly_code.append('  pop rbp')
 
     def visit_Block(self, node):
-        for child in node.children: self.visit(child)
+        # --- Scope Management: Entering a new scope ---
+        # Save the current state of the symbol table and stack index
+        old_symbol_table = self.symbol_table.copy()
+        old_stack_index = self.stack_index
+
+        for child in node.children:
+            self.visit(child)
+
+        # --- Scope Management: Exiting the scope ---
+        # Restore the symbol table and stack index to what they were before the block.
+        # This effectively "forgets" any variables declared inside this block.
+        self.symbol_table = old_symbol_table
+        self.stack_index = old_stack_index
 
     def visit_VarDecl(self, node):
         var_name = node.var_node.value
-        if var_name in self.symbol_table: raise Exception(f"Variable '{var_name}' already declared.")
+        if var_name in self.symbol_table and self.symbol_table[var_name]['offset'] > self.stack_index:
+            # This is a simple check for redeclaration in the same immediate scope.
+            raise Exception(f"Variable '{var_name}' already declared in this scope.")
 
-        # Store type information in the symbol table
-        self.symbol_table[var_name] = {
-            'offset': self.stack_index,
-            'type': node.type_node.value  # e.g., 'int'
-        }
+        # Store type and offset information
+        self.symbol_table[var_name] = {'offset': self.stack_index, 'type': node.type_node.value}
 
         self.visit(node.assign_node)
         self.assembly_code.append(f'  ; VarDecl: {var_name}');
         self.assembly_code.append('  pop rax');
         self.assembly_code.append(f"  mov [rbp{self.symbol_table[var_name]['offset']}], rax")
+
+        # Allocate space for the next variable on the stack
         self.stack_index -= 8
 
     def visit_Assign(self, node):
@@ -105,6 +115,20 @@ class CodeGenerator(NodeVisitor):
         self.visit(node.else_block);
         self.assembly_code.append(f'{endif_label}:')
 
+    def visit_WhileStmt(self, node):
+        label_num = self._new_label()
+        start_label = f"L_while_start_{label_num}"
+        end_label = f"L_while_end_{label_num}"
+
+        self.assembly_code.append(f'{start_label}:')
+        self.visit(node.condition)
+        self.assembly_code.append('  pop rax');
+        self.assembly_code.append('  cmp rax, 0')
+        self.assembly_code.append(f'  je {end_label}')
+        self.visit(node.body)
+        self.assembly_code.append(f'  jmp {start_label}')
+        self.assembly_code.append(f'{end_label}:')
+
     def visit_Num(self, node):
         self.assembly_code.append(f'  ; Pushing number {node.value}'); self.assembly_code.append(f'  push {node.value}')
 
@@ -119,23 +143,18 @@ class CodeGenerator(NodeVisitor):
 
     def visit_BinOp(self, node):
         op_type = node.op.type
-
-        # Handle compile-time operators first
         if op_type == TokenType.TYPE_EQUAL:
-            left_type = self._get_node_type(node.left)
+            left_type = self._get_node_type(node.left);
             right_type = self._get_node_type(node.right)
             result = 1 if left_type == right_type else 0
-            self.assembly_code.append(f'  ; Compile-time type check: {left_type} === {right_type}')
+            self.assembly_code.append(f'  ; Compile-time type check: {left_type} === {right_type}');
             self.assembly_code.append(f'  push {result}')
-            return  # IMPORTANT: Stop processing here
-
-        # --- Existing runtime evaluation logic ---
+            return
         self.visit(node.left);
         self.visit(node.right)
         self.assembly_code.append('  ; Binary Operation');
         self.assembly_code.append('  pop rbx');
         self.assembly_code.append('  pop rax')
-
         if op_type == TokenType.PLUS:
             self.assembly_code.append('  add rax, rbx')
         elif op_type == TokenType.MINUS:
@@ -160,7 +179,6 @@ class CodeGenerator(NodeVisitor):
             elif op_type == TokenType.GREATER_EQUAL:
                 self.assembly_code.append('  setge al')
             self.assembly_code.append('  movzx rax, al')
-
         self.assembly_code.append('  push rax')
 
     def visit_FunctionCall(self, node):

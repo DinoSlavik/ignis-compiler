@@ -25,6 +25,13 @@ class IfExpr(AST):
         self.else_block = else_block # For now, else is mandatory for if-expressions
     def __repr__(self): return f"IfExpr(condition={self.condition}, then={self.if_block}, else={self.else_block})"
 
+class WhileStmt(AST):
+    """Represents a while statement."""
+    def __init__(self, condition, body):
+        self.condition = condition
+        self.body = body
+    def __repr__(self): return f"    WhileStmt(condition={self.condition}, body={self.body})"
+
 class Type(AST):
     def __init__(self, token): self.token = token; self.value = token.value
     def __repr__(self): return f"Type(value='{self.value}')"

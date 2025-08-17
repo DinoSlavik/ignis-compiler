@@ -132,6 +132,14 @@ class Parser:
 
         return IfExpr(condition, if_block, else_block)
 
+    def while_statement(self):
+        self.eat(TokenType.KW_WHILE)
+        self.eat(TokenType.LPAREN)
+        condition = self.expr()
+        self.eat(TokenType.RPAREN)
+        body = self.block()
+        return WhileStmt(condition, body)
+
     def variable_declaration(self):
         is_mutable = False
         if self.current_token.type == TokenType.KW_MUT: is_mutable = True; self.eat(TokenType.KW_MUT)
@@ -177,6 +185,12 @@ class Parser:
 
     def statement(self):
         token_type = self.current_token.type
+
+        # Statements that do NOT end with a semicolon
+        if token_type == TokenType.KW_WHILE:
+            return self.while_statement()
+
+        # Statements that DO end with a semicolon
         if token_type in (TokenType.KW_INT, TokenType.KW_MUT):
             node = self.variable_declaration()
         elif token_type == TokenType.IDENTIFIER and self.peek_token.type == TokenType.ASSIGN:
@@ -189,16 +203,21 @@ class Parser:
         return node
 
     def block(self):
-        self.eat(TokenType.LBRACE);
+        self.eat(TokenType.LBRACE)
         nodes = []
         while self.current_token.type != TokenType.RBRACE:
+            # Check if the next token is the closing brace.
+            # If so, the current element is the final expression of the block.
             if self.peek_token.type == TokenType.RBRACE:
                 nodes.append(self.expr())
             else:
+                # Otherwise, it's a regular statement that must end with a semicolon.
                 nodes.append(self.statement())
         self.eat(TokenType.RBRACE)
-        root = Block();
-        for node in nodes: root.children.append(node)
+
+        root = Block()
+        for node in nodes:
+            root.children.append(node)
         return root
 
     def declaration(self):

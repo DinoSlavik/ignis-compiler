@@ -34,6 +34,7 @@ class TokenType(Enum):
     KW_IF         = 'if'
     KW_ELSE       = 'else'
     KW_ELIF       = 'elif'
+    KW_WHILE      = 'while'
 
     # Literals and identifiers
     IDENTIFIER    = 'IDENTIFIER'
@@ -57,6 +58,7 @@ RESERVED_KEYWORDS = {
     'if': Token(TokenType.KW_IF, 'if'),
     'else': Token(TokenType.KW_ELSE, 'else'),
     'elif': Token(TokenType.KW_ELIF, 'elif'),
+    'while': Token(TokenType.KW_WHILE, 'while'),
 }
 
 class Lexer:
