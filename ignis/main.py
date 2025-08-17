@@ -9,16 +9,15 @@ from parser import Parser
 from codegen import CodeGenerator
 
 
-def compile_source(source_code):
+def compile_source(source_code, file_path):
     """
-    Runs the source code through all stages of the compiler (lexing, parsing, code generation).
-    Returns the generated assembly code.
+    Runs the source code through all stages of the compiler.
     """
-    # 1. Lexer
-    lexer = Lexer(source_code)
+    # 1. Lexer now knows the file path
+    lexer = Lexer(source_code, file_path)
 
-    # 2. Parser
-    parser = Parser(lexer)
+    # 2. Parser now gets the full source code to build context for errors
+    parser = Parser(lexer, source_code)
     ast = parser.parse()
 
     # 3. Code Generation
@@ -70,13 +69,11 @@ def main():
         print(f"Error: Input file not found at '{input_path}'")
         sys.exit(1)
 
-    # Determine output file names
     if args.output:
         output_base_path = Path(args.output).resolve()
     else:
         output_base_path = input_path.resolve().with_suffix('')
 
-    # Create a build directory next to the output file
     build_dir = output_base_path.parent / '.build'
     build_dir.mkdir(exist_ok=True)
 
@@ -91,7 +88,7 @@ def main():
         with open(input_path, 'r', encoding='utf-8') as f:
             source_code = f.read()
 
-        assembly_code = compile_source(source_code)
+        assembly_code = compile_source(source_code, str(input_path))
 
         with open(asm_file_path, 'w') as f:
             f.write(assembly_code)
@@ -113,20 +110,18 @@ def main():
         subprocess.run(['ld', '-o', executable_path, obj_file_path], check=True)
         print(f"  [+] Executable file saved to {executable_path}")
 
-        print("\n--- Compilation successful! ---")
-        print(f"Run './{executable_path.name}' to see the result.")
+        print(f"\n--- Compilation successful! ---\nRun './{executable_path.name}' to see the result.")
 
     except FileNotFoundError:
-        print("\nError: 'nasm' or 'ld' not found. Please ensure they are installed and in your PATH.")
+        print("\nError: 'nasm' or 'ld' not found. Please ensure they are in your PATH.")
         sys.exit(1)
     except subprocess.CalledProcessError as e:
         print(f"\nAn error occurred during an external command: {e}")
         sys.exit(1)
     except Exception as e:
-        print(f"\nAn error occurred during compilation: {e}")
+        print(f"\nAn error occurred during compilation:\n{e}")
         sys.exit(1)
     finally:
-        # --- Cleanup ---
         if not args.keep_files and not args.S and not args.c:
             print("--- Cleaning up intermediate files ---")
             try:
@@ -134,8 +129,7 @@ def main():
                     asm_file_path.unlink()
                 if obj_file_path.exists():
                     obj_file_path.unlink()
-                # Try to remove the build directory if it's empty
-                if not any(build_dir.iterdir()):
+                if build_dir.exists() and not any(build_dir.iterdir()):
                     build_dir.rmdir()
                 print("  [+] Cleanup successful.")
             except OSError as e:
