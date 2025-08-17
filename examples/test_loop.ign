@@ -1,0 +1,12 @@
+int main() {
+    mut int i = 0;
+    loop {
+        i = i + 1;
+        print(i);
+        if (i >= 5) {
+            break;
+        }
+        else {};
+    }
+    return 0;
+}

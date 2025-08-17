@@ -18,19 +18,26 @@ class ConstDecl(AST):
     def __repr__(self): return f"  ConstDecl(const {self.type_node.value} {self.var_node.value} = {self.assign_node})"
 
 class IfExpr(AST):
-    """Represents an if-else expression."""
-    def __init__(self, condition, if_block, else_block):
-        self.condition = condition
-        self.if_block = if_block
-        self.else_block = else_block # For now, else is mandatory for if-expressions
+    def __init__(self, condition, if_block, else_block): self.condition = condition; self.if_block = if_block; self.else_block = else_block
     def __repr__(self): return f"IfExpr(condition={self.condition}, then={self.if_block}, else={self.else_block})"
 
 class WhileStmt(AST):
-    """Represents a while statement."""
-    def __init__(self, condition, body):
-        self.condition = condition
-        self.body = body
+    def __init__(self, condition, body): self.condition = condition; self.body = body
     def __repr__(self): return f"    WhileStmt(condition={self.condition}, body={self.body})"
+
+class LoopStmt(AST):
+    """Represents an infinite loop statement."""
+    def __init__(self, body):
+        self.body = body
+    def __repr__(self): return f"    LoopStmt(body={self.body})"
+
+class BreakStmt(AST):
+    """Represents a break statement."""
+    def __repr__(self): return "    BreakStmt"
+
+class ContinueStmt(AST):
+    """Represents a continue statement."""
+    def __repr__(self): return "    ContinueStmt"
 
 class Type(AST):
     def __init__(self, token): self.token = token; self.value = token.value

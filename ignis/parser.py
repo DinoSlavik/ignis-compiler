@@ -10,42 +10,23 @@ class Parser:
         self.peek_token = self.lexer.get_next_token()
 
     def error(self, message, token=None):
-        """
-        Raises a formatted parser error with code context.
-        """
         token = token or self.current_token
-        line_num = token.line
-        col_num = token.col
-
-        # Header
-        header = f"E001: {message}"
+        line_num, col_num = token.line, token.col
+        header = f"E001: {message}";
         location = f"--> {self.lexer.file_path}:{line_num}:{col_num}"
-
-        # Code context snippet
-        snippet = ""
-        # Define the range of lines to show, ensuring we don't go out of bounds
-        start_line = max(0, line_num - 3)
+        snippet = "";
+        start_line = max(0, line_num - 3);
         end_line = min(len(self.source_lines), line_num + 2)
-
         for i in range(start_line, end_line):
-            line = self.source_lines[i]
-            line_number_str = f"{i + 1:4} | "
+            line = self.source_lines[i];
+            line_number_str = f"{i + 1:4} | ";
             snippet += f"{line_number_str}{line}\n"
-            # Add the pointer on the line where the error occurred
-            if i + 1 == line_num:
-                pointer_padding = ' ' * (len(line_number_str) + col_num - 1)
-                snippet += f"{pointer_padding}^\n"
-
-        # Hints for common mistakes
+            if i + 1 == line_num: pointer_padding = ' ' * (
+                        len(line_number_str) + col_num - 1); snippet += f"{pointer_padding}^\n"
         hint = ""
-        if "expected SEMICOLON" in message:
-            hint = "Hint: Did you forget a ';' at the end of a statement?"
-
-        # Combine everything
+        if "expected SEMICOLON" in message: hint = "Hint: Did you forget a ';' at the end of a statement?"
         full_error = f"{header}\n{location}\n\n{snippet}"
-        if hint:
-            full_error += f"\n{hint}"
-
+        if hint: full_error += f"\n{hint}"
         raise Exception(f'Parser error:\n{full_error}')
 
     def eat(self, token_type):
@@ -55,12 +36,9 @@ class Parser:
         else:
             self.error(f"Unexpected token: expected {token_type.name}, but got {self.current_token.type.name}")
 
-    # ... (The rest of the parser code remains the same as the last working version) ...
     def type_spec(self):
         token = self.current_token
-        if token.type == TokenType.KW_INT:
-            self.eat(TokenType.KW_INT)
-            return Type(token)
+        if token.type == TokenType.KW_INT: self.eat(TokenType.KW_INT); return Type(token)
         self.error("Expected a type specifier")
 
     def factor(self):
@@ -153,6 +131,19 @@ class Parser:
         body = self.block()
         return WhileStmt(condition, body)
 
+    def loop_statement(self):
+        self.eat(TokenType.KW_LOOP)
+        body = self.block()
+        return LoopStmt(body)
+
+    def break_statement(self):
+        self.eat(TokenType.KW_BREAK)
+        return BreakStmt()
+
+    def continue_statement(self):
+        self.eat(TokenType.KW_CONTINUE)
+        return ContinueStmt()
+
     def variable_declaration(self):
         is_mutable = False
         if self.current_token.type == TokenType.KW_MUT: is_mutable = True; self.eat(TokenType.KW_MUT)
@@ -181,7 +172,10 @@ class Parser:
 
     def statement(self):
         token_type = self.current_token.type
+
         if token_type == TokenType.KW_WHILE: return self.while_statement()
+        if token_type == TokenType.KW_LOOP: return self.loop_statement()
+
         node = None
         if token_type in (TokenType.KW_INT, TokenType.KW_MUT):
             node = self.variable_declaration()
@@ -189,8 +183,13 @@ class Parser:
             node = self.assignment_statement()
         elif token_type == TokenType.KW_RETURN:
             node = self.return_statement()
+        elif token_type == TokenType.KW_BREAK:
+            node = self.break_statement()
+        elif token_type == TokenType.KW_CONTINUE:
+            node = self.continue_statement()
         else:
             node = self.expr()
+
         self.eat(TokenType.SEMICOLON)
         return node
 
@@ -229,20 +228,18 @@ class Parser:
         return Program(declarations)
 
     def assignment_statement(self):
-        left = Var(self.current_token)
-        self.eat(TokenType.IDENTIFIER)
+        left = Var(self.current_token);
+        self.eat(TokenType.IDENTIFIER);
         op = self.current_token
-        self.eat(TokenType.ASSIGN)
-        right = self.expr()
+        self.eat(TokenType.ASSIGN);
+        right = self.expr();
         return Assign(left, op, right)
 
     def function_call(self):
-        name_token = self.current_token
-        self.eat(TokenType.IDENTIFIER)
+        name_token = self.current_token;
+        self.eat(TokenType.IDENTIFIER);
         self.eat(TokenType.LPAREN)
-        args = []
-        if self.current_token.type != TokenType.RPAREN:
-            args.append(self.expr())
-        self.eat(TokenType.RPAREN)
+        args = [];
+        if self.current_token.type != TokenType.RPAREN: args.append(self.expr())
+        self.eat(TokenType.RPAREN);
         return FunctionCall(name_token.value, args)
-

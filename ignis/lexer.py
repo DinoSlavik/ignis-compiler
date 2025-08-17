@@ -32,6 +32,9 @@ class TokenType(Enum):
     KW_ELSE = 'else'
     KW_ELIF = 'elif'
     KW_WHILE = 'while'
+    KW_LOOP = 'loop'
+    KW_BREAK = 'break'
+    KW_CONTINUE = 'continue'
 
     # Literals and identifiers
     IDENTIFIER = 'IDENTIFIER'
@@ -62,6 +65,9 @@ RESERVED_KEYWORDS = {
     'else': TokenType.KW_ELSE,
     'elif': TokenType.KW_ELIF,
     'while': TokenType.KW_WHILE,
+    'loop': TokenType.KW_LOOP,
+    'break': TokenType.KW_BREAK,
+    'continue': TokenType.KW_CONTINUE,
 }
 
 
