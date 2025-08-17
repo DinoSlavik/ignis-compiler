@@ -1,3 +1,7 @@
+# ==============================================================================
+# File: ignis/lexer.py (FIXED '===' tokenization)
+# ==============================================================================
+
 from enum import Enum
 
 class TokenType(Enum):
@@ -20,6 +24,7 @@ class TokenType(Enum):
     NOT_EQUAL     = '!='
     LESS_EQUAL    = '<='
     GREATER_EQUAL = '>='
+    TYPE_EQUAL    = '==='
 
     # Keywords
     KW_INT        = 'int'
@@ -27,14 +32,12 @@ class TokenType(Enum):
     KW_CONST      = 'const'
     KW_RETURN     = 'return'
     KW_IF         = 'if'
-    KW_ELIF       = 'elif'
     KW_ELSE       = 'else'
+    KW_ELIF       = 'elif'
 
     # Literals and identifiers
     IDENTIFIER    = 'IDENTIFIER'
     INTEGER       = 'INTEGER'
-
-    # End of File
     EOF           = 'EOF'
 
 class Token:
@@ -52,8 +55,8 @@ RESERVED_KEYWORDS = {
     'const': Token(TokenType.KW_CONST, 'const'),
     'return': Token(TokenType.KW_RETURN, 'return'),
     'if': Token(TokenType.KW_IF, 'if'),
-    'elif': Token(TokenType.KW_ELIF, 'elif'),
     'else': Token(TokenType.KW_ELSE, 'else'),
+    'elif': Token(TokenType.KW_ELIF, 'elif'),
 }
 
 class Lexer:
@@ -72,8 +75,8 @@ class Lexer:
         else:
             self.current_char = self.text[self.pos]
 
-    def peek(self):
-        peek_pos = self.pos + 1
+    def peek(self, offset=1):
+        peek_pos = self.pos + offset
         if peek_pos > len(self.text) - 1:
             return None
         else:
@@ -90,13 +93,22 @@ class Lexer:
             return
 
         if self.current_char == '/' and self.peek() == '*':
-            self.advance(); self.advance()
+            self.advance()
+            self.advance()
             nesting_level = 1
             while nesting_level > 0:
-                if self.current_char is None: self.error("Unterminated multi-line comment.")
-                elif self.current_char == '/' and self.peek() == '*': self.advance(); self.advance(); nesting_level += 1
-                elif self.current_char == '*' and self.peek() == '/': self.advance(); self.advance(); nesting_level -= 1
-                else: self.advance()
+                if self.current_char is None:
+                    self.error("Unterminated multi-line comment.")
+                elif self.current_char == '/' and self.peek() == '*':
+                    self.advance()
+                    self.advance()
+                    nesting_level += 1
+                elif self.current_char == '*' and self.peek() == '/':
+                    self.advance()
+                    self.advance()
+                    nesting_level -= 1
+                else:
+                    self.advance()
             return
 
     def number(self):
@@ -111,23 +123,45 @@ class Lexer:
         while self.current_char is not None and (self.current_char.isalnum() or self.current_char == '_'):
             result += self.current_char
             self.advance()
-        token = RESERVED_KEYWORDS.get(result, Token(TokenType.IDENTIFIER, result))
-        return token
+        return RESERVED_KEYWORDS.get(result, Token(TokenType.IDENTIFIER, result))
 
     def get_next_token(self):
         while self.current_char is not None:
-            if self.current_char.isspace(): self.skip_whitespace(); continue
-            if self.current_char == '/' and (self.peek() == '/' or self.peek() == '*'): self.skip_comment(); continue
-            if self.current_char.isdigit(): return Token(TokenType.INTEGER, self.number())
-            if self.current_char.isalpha() or self.current_char == '_': return self.identifier()
+            if self.current_char.isspace():
+                self.skip_whitespace()
+                continue
+            if self.current_char == '/' and (self.peek() == '/' or self.peek() == '*'):
+                self.skip_comment()
+                continue
+            if self.current_char.isdigit():
+                return Token(TokenType.INTEGER, self.number())
+            if self.current_char.isalpha() or self.current_char == '_':
+                return self.identifier()
 
-            # Handle multi-character operators first
-            if self.current_char == '=' and self.peek() == '=': self.advance(); self.advance(); return Token(TokenType.EQUAL_EQUAL, '==')
-            if self.current_char == '!' and self.peek() == '=': self.advance(); self.advance(); return Token(TokenType.NOT_EQUAL, '!=')
-            if self.current_char == '<' and self.peek() == '=': self.advance(); self.advance(); return Token(TokenType.LESS_EQUAL, '<=')
-            if self.current_char == '>' and self.peek() == '=': self.advance(); self.advance(); return Token(TokenType.GREATER_EQUAL, '>=')
+            # *** THE CRITICAL LOGIC IS HERE ***
+            # Check for 3-character operators first, then 2, then 1.
+            if self.current_char == '=' and self.peek() == '=' and self.peek(2) == '=':
+                self.advance()
+                self.advance()
+                self.advance()
+                return Token(TokenType.TYPE_EQUAL, '===')
+            if self.current_char == '=' and self.peek() == '=':
+                self.advance()
+                self.advance()
+                return Token(TokenType.EQUAL, '==')
+            if self.current_char == '!' and self.peek() == '=':
+                self.advance()
+                self.advance()
+                return Token(TokenType.NOT_EQUAL, '!=')
+            if self.current_char == '<' and self.peek() == '=':
+                self.advance()
+                self.advance()
+                return Token(TokenType.LESS_EQUAL, '<=')
+            if self.current_char == '>' and self.peek() == '=':
+                self.advance()
+                self.advance()
+                return Token(TokenType.GREATER_EQUAL, '>=')
 
-            # Handle single-character tokens
             try:
                 token_type = TokenType(self.current_char)
                 token = Token(token_type, token_type.value)
