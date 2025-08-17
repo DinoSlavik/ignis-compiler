@@ -1,0 +1,20 @@
+// Const declaration
+const int VERSION = 1
+
+/*
+    Multiline
+    Comment
+    About main func declaration
+*/
+int main() {
+    int a = 10;
+    int b = 32;
+
+    mut int result = a + b;
+    print(result);
+
+    result = result + VERSION;
+    print(result);
+
+    return 0;
+}
