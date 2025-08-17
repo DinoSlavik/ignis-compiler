@@ -18,6 +18,14 @@ class Parser:
         else:
             self.error(f"Unexpected token: expected {token_type}, got {self.current_token.type}")
 
+    def type_spec(self):
+        """Parses a type specifier like 'int'."""
+        token = self.current_token
+        if token.type == TokenType.KW_INT:
+            self.eat(TokenType.KW_INT)
+            return Type(token)
+        self.error("Expected a type specifier")
+
     def factor(self):
         token = self.current_token
         if token.type == TokenType.INTEGER:
@@ -28,8 +36,10 @@ class Parser:
             node = self.expr()
             self.eat(TokenType.RPAREN)
             return node
-        elif token.type == TokenType.LBRACE:  # A block can now be a factor in an expression
+        elif token.type == TokenType.LBRACE:
             return self.block()
+        elif token.type == TokenType.KW_IF:
+            return self.if_expression()
         elif token.type == TokenType.IDENTIFIER:
             if self.peek_token.type == TokenType.LPAREN:
                 return self.function_call()
@@ -49,7 +59,7 @@ class Parser:
             node = BinOp(left=node, op=token, right=self.factor())
         return node
 
-    def expr(self):
+    def additive_expr(self):
         node = self.term()
         while self.current_token.type in (TokenType.PLUS, TokenType.MINUS):
             token = self.current_token
@@ -60,22 +70,47 @@ class Parser:
             node = BinOp(left=node, op=token, right=self.term())
         return node
 
-    def type_spec(self):
-        token = self.current_token
-        if token.type == TokenType.KW_INT:
-            self.eat(TokenType.KW_INT)
-            return Type(token)
-        self.error("Expected a type specifier")
+    def comparison_expr(self):
+        node = self.additive_expr()
+        COMPARISON_OPS = (
+            TokenType.EQUAL, TokenType.NOT_EQUAL, TokenType.LESS,
+            TokenType.LESS_EQUAL, TokenType.GREATER, TokenType.GREATER_EQUAL
+        )
+        while self.current_token.type in COMPARISON_OPS:
+            op = self.current_token
+            self.eat(op.type)
+            right = self.additive_expr()
+            node = BinOp(left=node, op=op, right=right)
+        return node
+
+    def expr(self):
+        return self.comparison_expr()
+
+    def if_expression(self):
+        self.eat(TokenType.KW_IF)
+        self.eat(TokenType.LPAREN)
+        condition = self.expr()
+        self.eat(TokenType.RPAREN)
+        if_block = self.block()
+
+        if self.current_token.type == TokenType.KW_ELSE:
+            self.eat(TokenType.KW_ELSE)
+            else_block = self.block()
+            return IfExpr(condition, if_block, else_block)
+        else:
+            self.error("Expected 'else' for if-expression.")
 
     def variable_declaration(self):
         is_mutable = False
         if self.current_token.type == TokenType.KW_MUT:
             is_mutable = True
             self.eat(TokenType.KW_MUT)
+
         type_node = self.type_spec()
         var_token = self.current_token
         self.eat(TokenType.IDENTIFIER)
         var_node = Var(var_token)
+
         self.eat(TokenType.ASSIGN)
         assign_node = self.expr()
         return VarDecl(type_node, var_node, assign_node, is_mutable)
@@ -114,42 +149,31 @@ class Parser:
         return Return(value)
 
     def statement(self):
-        """
-        Parses a single statement. A statement is something that doesn't produce a value.
-        It must end with a semicolon.
-        """
         token_type = self.current_token.type
+
         if token_type in (TokenType.KW_INT, TokenType.KW_MUT):
             node = self.variable_declaration()
         elif token_type == TokenType.IDENTIFIER and self.peek_token.type == TokenType.ASSIGN:
             node = self.assignment_statement()
-        elif token_type == TokenType.IDENTIFIER and self.peek_token.type == TokenType.LPAREN:
-            node = self.function_call()
+        # *** THE MISSING CHECK IS BACK! ***
         elif token_type == TokenType.KW_RETURN:
             node = self.return_statement()
         else:
-            # If it's not a recognized statement, it might be an expression statement
-            # like a function call that we want to discard the result of.
+            # If it's not a recognized statement, it must be an expression statement
+            # like a function call or if-expression where we discard the result.
             node = self.expr()
 
         self.eat(TokenType.SEMICOLON)
         return node
 
     def block(self):
-        """
-        Parses a block { ... }.
-        A block contains a list of statements, and can optionally end with an
-        expression that becomes the block's return value.
-        """
         self.eat(TokenType.LBRACE)
         nodes = []
         while self.current_token.type != TokenType.RBRACE:
-            # If the next token is RBRACE, the current token must be part of a final expression
             if self.peek_token.type == TokenType.RBRACE:
-                nodes.append(self.expr())  # Parse as an expression, don't eat semicolon
+                nodes.append(self.expr())
             else:
-                nodes.append(self.statement())  # Parse as a full statement
-
+                nodes.append(self.statement())
         self.eat(TokenType.RBRACE)
 
         root = Block()
@@ -169,7 +193,7 @@ class Parser:
             self.eat(TokenType.IDENTIFIER)
             self.eat(TokenType.LPAREN)
             self.eat(TokenType.RPAREN)
-            body = self.block()  # Use the new block parser
+            body = self.block()
             return FunctionDecl(type_node, func_name, body)
 
         self.error(f"Invalid top-level declaration. Unexpected token: {self.current_token}")

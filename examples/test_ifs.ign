@@ -1,0 +1,14 @@
+int main() {
+    int a = 10;
+    int b = 20;
+
+    int max_val = if (a > b) {
+        a
+    } else {
+        b
+    };
+
+    print(max_val); // Повинно вивести 20
+
+    return 0;
+}
