@@ -9,6 +9,14 @@ class Parser:
         self.current_token = self.lexer.get_next_token()
         self.peek_token = self.lexer.get_next_token()
 
+    def _format_token_type(self, token_type):
+        """Helper to format token types for error messages."""
+        if token_type.value.startswith('KW_'):
+            return f"keyword '{token_type.name[3:].lower()}'"
+        if len(token_type.value) == 1 and not token_type.value.isalnum():
+            return f"'{token_type.value}'"
+        return token_type.name
+
     def error(self, message, token=None):
         token = token or self.current_token
         line_num, col_num = token.line, token.col
@@ -24,7 +32,7 @@ class Parser:
             if i + 1 == line_num: pointer_padding = ' ' * (
                         len(line_number_str) + col_num - 1); snippet += f"{pointer_padding}^\n"
         hint = ""
-        if "expected SEMICOLON" in message: hint = "Hint: Did you forget a ';' at the end of a statement?"
+        if "expected" in message and "SEMICOLON" in message: hint = "Hint: Did you forget a ';' at the end of a statement?"
         full_error = f"{header}\n{location}\n\n{snippet}"
         if hint: full_error += f"\n{hint}"
         raise Exception(f'Parser error:\n{full_error}')
@@ -34,8 +42,11 @@ class Parser:
             self.current_token = self.peek_token
             self.peek_token = self.lexer.get_next_token()
         else:
-            self.error(f"Unexpected token: expected {token_type.name}, but got {self.current_token.type.name}")
+            expected_str = self._format_token_type(token_type)
+            got_str = self._format_token_type(self.current_token.type)
+            self.error(f"Unexpected token: expected {expected_str}, but got {got_str}")
 
+    # ... (The rest of the parser code is unchanged from the last working version) ...
     def type_spec(self):
         token = self.current_token
         if token.type == TokenType.KW_INT: self.eat(TokenType.KW_INT); return Type(token)
@@ -172,10 +183,8 @@ class Parser:
 
     def statement(self):
         token_type = self.current_token.type
-
         if token_type == TokenType.KW_WHILE: return self.while_statement()
         if token_type == TokenType.KW_LOOP: return self.loop_statement()
-
         node = None
         if token_type in (TokenType.KW_INT, TokenType.KW_MUT):
             node = self.variable_declaration()
@@ -189,7 +198,6 @@ class Parser:
             node = self.continue_statement()
         else:
             node = self.expr()
-
         self.eat(TokenType.SEMICOLON)
         return node
 
