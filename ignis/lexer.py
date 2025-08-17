@@ -94,16 +94,22 @@ class Lexer:
 
         # Multi-line comment
         if self.current_char == '/' and self.peek() == '*':
-            self.advance() # Consume '/'
-            self.advance() # Consume '*'
-            while True:
+            self.advance()  # Consume '/'
+            self.advance()  # Consume '*'
+            nesting_level = 1
+            while nesting_level > 0:
                 if self.current_char is None:
                     self.error("Unterminated multi-line comment.")
-                if self.current_char == '*' and self.peek() == '/':
-                    break
-                self.advance()
-            self.advance() # Consume '*'
-            self.advance() # Consume '/'
+                elif self.current_char == '/' and self.peek() == '*':
+                    self.advance()
+                    self.advance()
+                    nesting_level += 1
+                elif self.current_char == '*' and self.peek() == '/':
+                    self.advance()
+                    self.advance()
+                    nesting_level -= 1
+                else:
+                    self.advance()
             return
 
     def number(self):

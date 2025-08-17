@@ -207,4 +207,7 @@ class Parser:
         while self.current_token.type != TokenType.EOF:
             declarations.append(self.declaration())
 
+        if not declarations:
+            self.error("Source file contains no code (or no 'main' function).")
+
         return Program(declarations)
