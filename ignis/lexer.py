@@ -16,7 +16,7 @@ class TokenType(Enum):
     GREATER       = '>'
 
     # Multi-character tokens
-    EQUAL   = '=='
+    EQUAL         = '=='
     NOT_EQUAL     = '!='
     LESS_EQUAL    = '<='
     GREATER_EQUAL = '>='
@@ -27,6 +27,7 @@ class TokenType(Enum):
     KW_CONST      = 'const'
     KW_RETURN     = 'return'
     KW_IF         = 'if'
+    KW_ELIF       = 'elif'
     KW_ELSE       = 'else'
 
     # Literals and identifiers
@@ -51,6 +52,7 @@ RESERVED_KEYWORDS = {
     'const': Token(TokenType.KW_CONST, 'const'),
     'return': Token(TokenType.KW_RETURN, 'return'),
     'if': Token(TokenType.KW_IF, 'if'),
+    'elif': Token(TokenType.KW_ELIF, 'elif'),
     'else': Token(TokenType.KW_ELSE, 'else'),
 }
 

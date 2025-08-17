@@ -19,7 +19,6 @@ class Parser:
             self.error(f"Unexpected token: expected {token_type}, got {self.current_token.type}")
 
     def type_spec(self):
-        """Parses a type specifier like 'int'."""
         token = self.current_token
         if token.type == TokenType.KW_INT:
             self.eat(TokenType.KW_INT)
@@ -83,22 +82,54 @@ class Parser:
             node = BinOp(left=node, op=op, right=right)
         return node
 
+    def ternary_expr(self):
+        node = self.comparison_expr()
+        if self.current_token.type == TokenType.KW_IF:
+            self.eat(TokenType.KW_IF)
+            condition = self.comparison_expr()
+            self.eat(TokenType.KW_ELSE)
+            else_block = self.ternary_expr()
+
+            if_node_as_block = Block()
+            if_node_as_block.children.append(node)
+
+            else_node_as_block = Block()
+            else_node_as_block.children.append(else_block)
+
+            return IfExpr(condition=condition, if_block=if_node_as_block, else_block=else_node_as_block)
+        return node
+
     def expr(self):
-        return self.comparison_expr()
+        return self.ternary_expr()
 
     def if_expression(self):
-        self.eat(TokenType.KW_IF)
+        """Parses an 'if' and its subsequent 'elif'/'else' chain."""
+        if self.current_token.type == TokenType.KW_IF:
+            self.eat(TokenType.KW_IF)
+        elif self.current_token.type == TokenType.KW_ELIF:
+            self.eat(TokenType.KW_ELIF)
         self.eat(TokenType.LPAREN)
         condition = self.expr()
         self.eat(TokenType.RPAREN)
         if_block = self.block()
 
-        if self.current_token.type == TokenType.KW_ELSE:
+        else_block = self.else_part()
+
+        return IfExpr(condition, if_block, else_block)
+
+    def else_part(self):
+        """Parses the 'elif'/'else' part of a conditional chain correctly."""
+        if self.current_token.type == TokenType.KW_ELIF:
+            # 'elif' is just 'else if'. So we parse a new if_expression,
+            # which will become the content of our 'else' branch.
+            return self.if_expression()
+
+        elif self.current_token.type == TokenType.KW_ELSE:
             self.eat(TokenType.KW_ELSE)
-            else_block = self.block()
-            return IfExpr(condition, if_block, else_block)
+            return self.block()
         else:
-            self.error("Expected 'else' for if-expression.")
+            self.error("Expected 'else' or 'elif' for if-expression.")
+            return None
 
     def variable_declaration(self):
         is_mutable = False
@@ -155,12 +186,9 @@ class Parser:
             node = self.variable_declaration()
         elif token_type == TokenType.IDENTIFIER and self.peek_token.type == TokenType.ASSIGN:
             node = self.assignment_statement()
-        # *** THE MISSING CHECK IS BACK! ***
         elif token_type == TokenType.KW_RETURN:
             node = self.return_statement()
         else:
-            # If it's not a recognized statement, it must be an expression statement
-            # like a function call or if-expression where we discard the result.
             node = self.expr()
 
         self.eat(TokenType.SEMICOLON)
@@ -202,8 +230,6 @@ class Parser:
         declarations = []
         while self.current_token.type != TokenType.EOF:
             declarations.append(self.declaration())
-
         if not declarations:
             self.error("Source file contains no code (or no 'main' function).")
-
         return Program(declarations)

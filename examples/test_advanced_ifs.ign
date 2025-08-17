@@ -1,0 +1,26 @@
+int main() {
+    int score = 85;
+
+    // Приклад if-elif-else
+    int grade_val = if (score >= 90)
+    {
+        5
+    } elif (score >= 80) {
+        4
+    } else {
+        3
+    };
+    print(grade_val); // Повинно вивести 4
+
+    // Приклад тернарного оператора
+    int is_passing = 1 if score >= 60 else 0;
+    print(is_passing); // Повинно вивести 1
+
+    int block_return = {
+        10
+    };
+    print(block_return);
+
+
+    return 0;
+}
