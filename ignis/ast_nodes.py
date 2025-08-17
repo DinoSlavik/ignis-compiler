@@ -101,14 +101,17 @@ class FunctionCall(AST):
     def __repr__(self):
         return f"    FunctionCall(name='{self.name}', args={self.args})"
 
-class Compound(AST):
-    """Represents a compound statement or a block { ... }"""
+class Block(AST):
+    """Represents a block of statements/expressions { ... }"""
     def __init__(self):
         self.children = []
 
     def __repr__(self):
         children_repr = '\n'.join(map(repr, self.children))
-        return f"Compound([\n{children_repr}\n    ])"
+        # Add indentation to children for pretty printing
+        indented_children = "      " + children_repr.replace("\n", "\n      ")
+        return f"Block([\n{indented_children}\n    ])"
+
 
 class Return(AST):
     """Represents a return statement."""

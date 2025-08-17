@@ -3,11 +3,6 @@ from lexer import TokenType
 
 
 class NodeVisitor:
-    """
-    A base class for visiting AST nodes.
-    It uses the visitor pattern to call a method like visit_NodeType.
-    """
-
     def visit(self, node):
         method_name = 'visit_' + type(node).__name__
         visitor = getattr(self, method_name, self.generic_visit)
@@ -20,8 +15,8 @@ class NodeVisitor:
 class CodeGenerator(NodeVisitor):
     def __init__(self):
         self.assembly_code = []
-        self.symbol_table = {}  # To track variables and their stack offsets
-        self.stack_index = -8  # Stack grows downwards, start at -8 from RBP
+        self.symbol_table = {}
+        self.stack_index = -8
 
     def generate(self, tree):
         self.assembly_code.append('section .bss')
@@ -39,23 +34,28 @@ class CodeGenerator(NodeVisitor):
     def visit_FunctionDecl(self, node):
         if node.func_name == 'main':
             self.assembly_code.append('_start:')
-            # Function prologue
             self.assembly_code.append('  push rbp')
             self.assembly_code.append('  mov rbp, rsp')
-            # *** THE FIX IS HERE! ***
-            # Allocate space for local variables on the stack.
-            # 3 variables * 8 bytes/var = 24 bytes.
-            # We align this to the next 16-byte boundary, which is 32.
             self.assembly_code.append('  sub rsp, 32 ; Allocate stack frame')
 
             self.visit(node.body)
 
-            # Function epilogue (though return syscall exits anyway)
+            # --- Exit Logic for main ---
+            # If the last statement in main was NOT an explicit 'return',
+            # we must generate the exit syscall ourselves, using the value
+            # of the last expression as the exit code.
+            if not node.body.children or not isinstance(node.body.children[-1], Return):
+                self.assembly_code.append('  pop rdi ; Implicit exit code')
+                self.assembly_code.append('  mov rax, 60 ; syscall for exit')
+                self.assembly_code.append('  syscall')
+
+            # The epilogue is technically unreachable if there's always an exit,
+            # but we'll leave it for now for structural correctness.
             self.assembly_code.append('  ; Epilogue')
             self.assembly_code.append('  add rsp, 32 ; Deallocate stack frame')
             self.assembly_code.append('  pop rbp')
 
-    def visit_Compound(self, node):
+    def visit_Block(self, node):
         for child in node.children:
             self.visit(child)
 
@@ -131,10 +131,8 @@ class CodeGenerator(NodeVisitor):
 
     def visit_Return(self, node):
         self.visit(node.value)
-        # The epilogue will be added after the body, but the syscall ensures exit.
-        # This code is for a clean exit.
         self.assembly_code.append('  ; Return statement')
-        self.assembly_code.append('  pop rdi ; Exit code')
+        self.assembly_code.append('  pop rdi ; Exit code for main')
         self.assembly_code.append('  mov rax, 60 ; syscall for exit')
         self.assembly_code.append('  syscall')
 
@@ -167,4 +165,3 @@ class CodeGenerator(NodeVisitor):
             '  ret',
             ''
         ])
-
