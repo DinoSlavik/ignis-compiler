@@ -1,5 +1,5 @@
 // Const declaration
-const int VERSION = 1
+const int VERSION = 1;
 
 /*
     Multiline
