@@ -31,6 +31,15 @@ class LoopStmt(AST):
         self.body = body
     def __repr__(self): return f"    LoopStmt(body={self.body})"
 
+class ForStmt(AST):
+    """Represents a for loop statement."""
+    def __init__(self, init, condition, increment, body):
+        self.init = init
+        self.condition = condition
+        self.increment = increment
+        self.body = body
+    def __repr__(self): return f"    ForStmt(init={self.init}, cond={self.condition}, inc={self.increment}, body={self.body})"
+
 class BreakStmt(AST):
     """Represents a break statement."""
     def __repr__(self): return "    BreakStmt"

@@ -1,7 +1,3 @@
-# ==============================================================================
-# File: ignis/codegen.py (UPDATED for loop, break, continue)
-# ==============================================================================
-
 from ast_nodes import *
 from lexer import TokenType
 
@@ -21,7 +17,7 @@ class CodeGenerator(NodeVisitor):
         self.symbol_table = {}
         self.stack_index = -8
         self.label_counter = 0
-        self.loop_labels_stack = []  # To handle nested loops
+        self.loop_labels_stack = []
 
     def _new_label(self):
         self.label_counter += 1
@@ -107,10 +103,9 @@ class CodeGenerator(NodeVisitor):
         self.assembly_code.append(f'{endif_label}:')
 
     def visit_WhileStmt(self, node):
-        label_num = self._new_label()
-        start_label = f"L_while_start_{label_num}"
+        label_num = self._new_label();
+        start_label = f"L_while_start_{label_num}";
         end_label = f"L_while_end_{label_num}"
-
         self.loop_labels_stack.append((start_label, end_label))
         self.assembly_code.append(f'{start_label}:')
         self.visit(node.condition)
@@ -123,10 +118,9 @@ class CodeGenerator(NodeVisitor):
         self.loop_labels_stack.pop()
 
     def visit_LoopStmt(self, node):
-        label_num = self._new_label()
-        start_label = f"L_loop_start_{label_num}"
+        label_num = self._new_label();
+        start_label = f"L_loop_start_{label_num}";
         end_label = f"L_loop_end_{label_num}"
-
         self.loop_labels_stack.append((start_label, end_label))
         self.assembly_code.append(f'{start_label}:')
         self.visit(node.body)
@@ -134,15 +128,48 @@ class CodeGenerator(NodeVisitor):
         self.assembly_code.append(f'{end_label}:')
         self.loop_labels_stack.pop()
 
+    def visit_ForStmt(self, node):
+        old_symbol_table = self.symbol_table.copy();
+        old_stack_index = self.stack_index
+        label_num = self._new_label()
+        start_label = f"L_for_start_{label_num}"
+        continue_label = f"L_for_continue_{label_num}"
+        end_label = f"L_for_end_{label_num}"
+
+        if node.init:
+            self.visit(node.init)
+            # BUG FIX: The init part is a statement and leaves nothing on the stack.
+            # Do NOT pop a result.
+
+        self.assembly_code.append(f'{start_label}:')
+        if node.condition:
+            self.visit(node.condition)
+            self.assembly_code.append('  pop rax');
+            self.assembly_code.append('  cmp rax, 0')
+            self.assembly_code.append(f'  je {end_label}')
+
+        self.loop_labels_stack.append((continue_label, end_label))
+        self.visit(node.body)
+        self.loop_labels_stack.pop()
+
+        self.assembly_code.append(f'{continue_label}:')
+        if node.increment:
+            self.visit(node.increment)
+            # BUG FIX: The increment part is a statement and leaves nothing on the stack.
+            # Do NOT pop a result.
+
+        self.assembly_code.append(f'  jmp {start_label}')
+        self.assembly_code.append(f'{end_label}:')
+        self.symbol_table = old_symbol_table;
+        self.stack_index = old_stack_index
+
     def visit_BreakStmt(self, node):
-        if not self.loop_labels_stack:
-            raise Exception("'break' outside of a loop")
+        if not self.loop_labels_stack: raise Exception("'break' outside of a loop")
         _, end_label = self.loop_labels_stack[-1]
         self.assembly_code.append(f'  jmp {end_label}')
 
     def visit_ContinueStmt(self, node):
-        if not self.loop_labels_stack:
-            raise Exception("'continue' outside of a loop")
+        if not self.loop_labels_stack: raise Exception("'continue' outside of a loop")
         start_label, _ = self.loop_labels_stack[-1]
         self.assembly_code.append(f'  jmp {start_label}')
 

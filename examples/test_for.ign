@@ -1,0 +1,6 @@
+int main() {
+    for (mut int i = 0; i < 1000000; i = i + 1) {
+        print(i);
+    }
+    return 0;
+}

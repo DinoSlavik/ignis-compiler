@@ -10,11 +10,8 @@ class Parser:
         self.peek_token = self.lexer.get_next_token()
 
     def _format_token_type(self, token_type):
-        """Helper to format token types for error messages."""
-        if token_type.value.startswith('KW_'):
-            return f"keyword '{token_type.name[3:].lower()}'"
-        if len(token_type.value) == 1 and not token_type.value.isalnum():
-            return f"'{token_type.value}'"
+        if token_type.value.startswith('KW_'): return f"keyword '{token_type.name[3:].lower()}'"
+        if len(token_type.value) == 1 and not token_type.value.isalnum(): return f"'{token_type.value}'"
         return token_type.name
 
     def error(self, message, token=None):
@@ -46,7 +43,7 @@ class Parser:
             got_str = self._format_token_type(self.current_token.type)
             self.error(f"Unexpected token: expected {expected_str}, but got {got_str}")
 
-    # ... (The rest of the parser code is unchanged from the last working version) ...
+    # ... (Most of the parser remains the same) ...
     def type_spec(self):
         token = self.current_token
         if token.type == TokenType.KW_INT: self.eat(TokenType.KW_INT); return Type(token)
@@ -147,6 +144,31 @@ class Parser:
         body = self.block()
         return LoopStmt(body)
 
+    def for_statement(self):
+        self.eat(TokenType.KW_FOR)
+        self.eat(TokenType.LPAREN)
+
+        init_node = None
+        if self.current_token.type != TokenType.SEMICOLON:
+            if self.current_token.type in (TokenType.KW_INT, TokenType.KW_MUT):
+                init_node = self.variable_declaration()
+            else:
+                init_node = self.expr()
+        self.eat(TokenType.SEMICOLON)
+
+        condition_node = None
+        if self.current_token.type != TokenType.SEMICOLON:
+            condition_node = self.expr()
+        self.eat(TokenType.SEMICOLON)
+
+        increment_node = None
+        if self.current_token.type != TokenType.RPAREN:
+            increment_node = self.assignment_statement()
+        self.eat(TokenType.RPAREN)
+
+        body_node = self.block()
+        return ForStmt(init_node, condition_node, increment_node, body_node)
+
     def break_statement(self):
         self.eat(TokenType.KW_BREAK)
         return BreakStmt()
@@ -183,8 +205,11 @@ class Parser:
 
     def statement(self):
         token_type = self.current_token.type
+
         if token_type == TokenType.KW_WHILE: return self.while_statement()
         if token_type == TokenType.KW_LOOP: return self.loop_statement()
+        if token_type == TokenType.KW_FOR: return self.for_statement()
+
         node = None
         if token_type in (TokenType.KW_INT, TokenType.KW_MUT):
             node = self.variable_declaration()
@@ -198,6 +223,7 @@ class Parser:
             node = self.continue_statement()
         else:
             node = self.expr()
+
         self.eat(TokenType.SEMICOLON)
         return node
 
@@ -251,3 +277,4 @@ class Parser:
         if self.current_token.type != TokenType.RPAREN: args.append(self.expr())
         self.eat(TokenType.RPAREN);
         return FunctionCall(name_token.value, args)
+
