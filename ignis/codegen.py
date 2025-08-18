@@ -1,3 +1,7 @@
+# ==============================================================================
+# File: ignis/codegen.py (UPDATED for full set of logical/bitwise operators)
+# ==============================================================================
+
 from ast_nodes import *
 from lexer import TokenType
 
@@ -181,83 +185,71 @@ class CodeGenerator(NodeVisitor):
         if op_type == TokenType.KW_BNOT:
             self.assembly_code.append('  not rax')
         elif op_type == TokenType.KW_NOT:
-            self.assembly_code.append('  cmp rax, 0')
-            self.assembly_code.append('  sete al')
+            self.assembly_code.append('  cmp rax, 0');
+            self.assembly_code.append('  sete al');
             self.assembly_code.append('  movzx rax, al')
         elif op_type == TokenType.KW_NBNOT:
-            # bnot(bnot(x)) is just x, so this is a no-op
-            pass
+            pass  # not(not(x)) is x
         elif op_type == TokenType.KW_NNOT:
-            # not(not(x)) is equivalent to checking if x is not zero
-            self.assembly_code.append('  cmp rax, 0')
-            self.assembly_code.append('  setne al')
+            self.assembly_code.append('  cmp rax, 0');
+            self.assembly_code.append('  setne al');
             self.assembly_code.append('  movzx rax, al')
         self.assembly_code.append('  push rax')
 
     def visit_BinOp(self, node):
         op_type = node.op.type
-        # --- Short-circuiting for 'and' and 'or' ---
-        if op_type == TokenType.KW_AND:
+        # --- Logical operators with short-circuiting ---
+        if op_type in (TokenType.KW_AND, TokenType.KW_NAND):
             label_num = self._new_label();
-            false_label = f"L_and_false_{label_num}";
-            endif_label = f"L_and_endif_{label_num}"
+            end_label = f"L_logic_end_{label_num}"
             self.visit(node.left);
             self.assembly_code.append('  pop rax');
             self.assembly_code.append('  cmp rax, 0')
-            self.assembly_code.append(f'  je {false_label}')
+            self.assembly_code.append(f'  je L_logic_false_{label_num}')
             self.visit(node.right);
             self.assembly_code.append('  pop rax');
             self.assembly_code.append('  cmp rax, 0')
-            self.assembly_code.append(f'  je {false_label}')
-            self.assembly_code.append('  mov rax, 1');
-            self.assembly_code.append(f'  jmp {endif_label}')
-            self.assembly_code.append(f'{false_label}:');
-            self.assembly_code.append('  mov rax, 0')
-            self.assembly_code.append(f'{endif_label}:');
+            self.assembly_code.append(f'  je L_logic_false_{label_num}')
+            self.assembly_code.append(f'  mov rax, {0 if op_type == TokenType.KW_NAND else 1}');
+            self.assembly_code.append(f'  jmp {end_label}')
+            self.assembly_code.append(f'L_logic_false_{label_num}:');
+            self.assembly_code.append(f'  mov rax, {1 if op_type == TokenType.KW_NAND else 0}')
+            self.assembly_code.append(f'{end_label}:');
             self.assembly_code.append('  push rax')
             return
-        if op_type == TokenType.KW_OR:
+        if op_type in (TokenType.KW_OR, TokenType.KW_NOR):
             label_num = self._new_label();
-            true_label = f"L_or_true_{label_num}";
-            endif_label = f"L_or_endif_{label_num}"
+            end_label = f"L_logic_end_{label_num}"
             self.visit(node.left);
             self.assembly_code.append('  pop rax');
             self.assembly_code.append('  cmp rax, 0')
-            self.assembly_code.append(f'  jne {true_label}')
+            self.assembly_code.append(f'  jne L_logic_true_{label_num}')
             self.visit(node.right);
             self.assembly_code.append('  pop rax');
             self.assembly_code.append('  cmp rax, 0')
-            self.assembly_code.append(f'  jne {true_label}')
-            self.assembly_code.append('  mov rax, 0');
-            self.assembly_code.append(f'  jmp {endif_label}')
-            self.assembly_code.append(f'{true_label}:');
-            self.assembly_code.append('  mov rax, 1')
-            self.assembly_code.append(f'{endif_label}:');
+            self.assembly_code.append(f'  jne L_logic_true_{label_num}')
+            self.assembly_code.append(f'  mov rax, {1 if op_type == TokenType.KW_NOR else 0}');
+            self.assembly_code.append(f'  jmp {end_label}')
+            self.assembly_code.append(f'L_logic_true_{label_num}:');
+            self.assembly_code.append(f'  mov rax, {0 if op_type == TokenType.KW_NOR else 1}')
+            self.assembly_code.append(f'{end_label}:');
+            self.assembly_code.append('  push rax')
+            return
+        if op_type in (TokenType.KW_XOR, TokenType.KW_XNOR):
+            self.visit(node.left);
+            self.assembly_code.append('  pop rax');
+            self.assembly_code.append('  cmp rax, 0');
+            self.assembly_code.append('  setne cl')
+            self.visit(node.right);
+            self.assembly_code.append('  pop rax');
+            self.assembly_code.append('  cmp rax, 0');
+            self.assembly_code.append('  setne dl')
+            self.assembly_code.append('  xor cl, dl')
+            if op_type == TokenType.KW_XNOR: self.assembly_code.append('  xor cl, 1')
+            self.assembly_code.append('  movzx rax, cl');
             self.assembly_code.append('  push rax')
             return
 
-        if op_type == TokenType.KW_XOR or op_type == TokenType.KW_XNOR:
-            # Logical XOR doesn't short-circuit, so we evaluate both sides to 0 or 1
-            # and then perform a bitwise XOR.
-            self.visit(node.left)
-            self.assembly_code.append('  pop rax')
-            self.assembly_code.append('  cmp rax, 0')
-            self.assembly_code.append('  setne cl ; cl = (left != 0)')
-
-            self.visit(node.right)
-            self.assembly_code.append('  pop rax')
-            self.assembly_code.append('  cmp rax, 0')
-            self.assembly_code.append('  setne dl ; dl = (right != 0)')
-
-            self.assembly_code.append('  xor cl, dl ; cl = cl ^ dl')
-            if op_type == TokenType.KW_XNOR:
-                self.assembly_code.append('  xor cl, 1 ; Invert for XNOR')
-
-            self.assembly_code.append('  movzx rax, cl')
-            self.assembly_code.append('  push rax')
-            return
-
-        # --- Standard and Bitwise operators ---
         if op_type == TokenType.TYPE_EQUAL:
             left_type = self._get_node_type(node.left);
             right_type = self._get_node_type(node.right)
@@ -278,33 +270,30 @@ class CodeGenerator(NodeVisitor):
             self.assembly_code.append('  imul rax, rbx')
         elif op_type == TokenType.DIVIDE:
             self.assembly_code.append('  cqo'); self.assembly_code.append('  idiv rbx')
-        elif op_type in (TokenType.EQUAL, TokenType.NOT_EQUAL, TokenType.LESS, TokenType.LESS_EQUAL, TokenType.GREATER, TokenType.GREATER_EQUAL):
+        elif op_type in (TokenType.EQUAL, TokenType.NOT_EQUAL, TokenType.LESS, TokenType.LESS_EQUAL, TokenType.GREATER,
+                         TokenType.GREATER_EQUAL):
             self.assembly_code.append('  cmp rax, rbx')
-        if op_type == TokenType.EQUAL:
-            self.assembly_code.append('  sete al')
-        elif op_type == TokenType.NOT_EQUAL:
-            self.assembly_code.append('  setne al')
-        elif op_type == TokenType.LESS:
-            self.assembly_code.append('  setl al')
-        elif op_type == TokenType.LESS_EQUAL:
-            self.assembly_code.append('  setle al')
-        elif op_type == TokenType.GREATER:
-            self.assembly_code.append('  setg al')
-        elif op_type == TokenType.GREATER_EQUAL:
-            self.assembly_code.append('  setge al')
+            if op_type == TokenType.EQUAL:
+                self.assembly_code.append('  sete al')
+            elif op_type == TokenType.NOT_EQUAL:
+                self.assembly_code.append('  setne al')
+            elif op_type == TokenType.LESS:
+                self.assembly_code.append('  setl al')
+            elif op_type == TokenType.LESS_EQUAL:
+                self.assembly_code.append('  setle al')
+            elif op_type == TokenType.GREATER:
+                self.assembly_code.append('  setg al')
+            elif op_type == TokenType.GREATER_EQUAL:
+                self.assembly_code.append('  setge al')
             self.assembly_code.append('  movzx rax, al')
-        elif op_type in (TokenType.KW_BAND, TokenType.KW_NAND, TokenType.KW_NBAND):
+        elif op_type in (TokenType.KW_BAND, TokenType.KW_NBAND):
             self.assembly_code.append('  and rax, rbx')
-        elif op_type in (TokenType.KW_BOR, TokenType.KW_NOR, TokenType.KW_NBOR):
+        elif op_type in (TokenType.KW_BOR, TokenType.KW_NBOR):
             self.assembly_code.append('  or rax, rbx')
-        elif op_type in (TokenType.KW_BXOR, TokenType.KW_XNOR, TokenType.KW_NBXOR):
+        elif op_type in (TokenType.KW_BXOR, TokenType.KW_NBXOR):
             self.assembly_code.append('  xor rax, rbx')
-
-        # --- Оновлена логіка для інвертованих операцій ---
-        if op_type in (TokenType.KW_NAND, TokenType.KW_NOR, TokenType.KW_XNOR, TokenType.KW_NBAND, TokenType.KW_NBOR,
-                       TokenType.KW_NBXOR):
+        if op_type in (TokenType.KW_NBAND, TokenType.KW_NBOR, TokenType.KW_NBXOR):
             self.assembly_code.append('  not rax')
-
         self.assembly_code.append('  push rax')
 
     def visit_FunctionCall(self, node):
@@ -332,3 +321,4 @@ class CodeGenerator(NodeVisitor):
             '  inc r9', '  test rax, rax', '  jnz print_int_loop',
             'print_int_write:', '  mov rax, 1', '  mov rsi, rdi', '  mov rdx, r9', '  mov rdi, 1', '  syscall', '  ret',
             ''])
+

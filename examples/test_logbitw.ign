@@ -1,20 +1,30 @@
 int main() {
-    int a = 10;
-    int b = 20;
+    // --- Logical Operators ---
+    print(1 and 1); // Expected: 1 (true)
+    print(1 and 0); // Expected: 0 (false)
+    print(1 or 0);  // Expected: 1 (true)
+    print(0 or 0);  // Expected: 0 (false)
+    print(not 1);   // Expected: 0 (false)
+    print(not 0);   // Expected: 1 (true)
+    print(1 xor 0); // Expected: 1 (true)
+    print(1 xor 1); // Expected: 0 (false)
 
-    if (a > 5 and b > 15) {
-        print(1); // Цей блок має виконатись
-    } else {
-        print(0);
-    };
+    // --- Inverted Logical ---
+    print(1 nand 1); // Expected: 0 (false)
+    print(1 nand 0); // Expected: 1 (true)
+    print(0 nor 0);  // Expected: 1 (true)
+    print(1 nor 0);  // Expected: 0 (false)
+    print(1 xnor 1); // Expected: 1 (true)
+    print(1 xnor 0); // Expected: 0 (false)
+    print(nnot 1);   // Expected: 1 (true)
 
-    if (a > 15 or b > 25) {
-        print(0);
-    } else {
-        print(1); // Цей блок має виконатись
-    };
-
-    print(1 xor 1);
+    // --- Bitwise Operators ---
+    // 5 is 0101 in binary
+    // 3 is 0011 in binary
+    print(5 band 3); // Expected: 1  (0001)
+    print(5 bor 3);  // Expected: 7  (0111)
+    print(5 bxor 3); // Expected: 6  (0110)
+    print(bnot 5);   // Expected: -6 (in two's complement)
 
     return 0;
 }
