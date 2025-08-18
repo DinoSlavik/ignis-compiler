@@ -1,7 +1,3 @@
-# ==============================================================================
-# File: ignis/codegen.py (UPDATED for full set of logical/bitwise operators)
-# ==============================================================================
-
 from ast_nodes import *
 from lexer import TokenType
 
@@ -28,15 +24,23 @@ class CodeGenerator(NodeVisitor):
         return self.label_counter
 
     def _get_node_type(self, node):
-        if isinstance(node, Num): return 'int'
+        if isinstance(node, Num): return Type(None, 0)  # Base int type
         if isinstance(node, Var):
             var_name = node.value
             if var_name in self.symbol_table:
                 return self.symbol_table[var_name]['type']
             else:
-                if var_name == "VERSION": return 'int'
+                if var_name == "VERSION": return Type(None, 0)
                 raise Exception(f"Cannot determine type of undeclared variable '{var_name}'")
-        return 'int'
+        if isinstance(node, UnaryOp):
+            if node.op.type == TokenType.KW_ADDR:
+                base_type = self._get_node_type(node.expr)
+                return Type(base_type.token, base_type.pointer_level + 1)
+            if node.op.type == TokenType.KW_DEREF:
+                base_type = self._get_node_type(node.expr)
+                if base_type.pointer_level == 0: raise Exception("Cannot dereference a non-pointer type")
+                return Type(base_type.token, base_type.pointer_level - 1)
+        return Type(None, 0)  # Default to int for now
 
     def generate(self, tree):
         self.assembly_code.append('section .bss');
@@ -55,14 +59,14 @@ class CodeGenerator(NodeVisitor):
             self.assembly_code.append('_start:');
             self.assembly_code.append('  push rbp');
             self.assembly_code.append('  mov rbp, rsp')
-            self.assembly_code.append('  sub rsp, 32 ; Allocate stack frame')
+            self.assembly_code.append('  sub rsp, 64 ; Allocate larger stack frame for locals')
             self.visit(node.body)
             if not node.body.children or not isinstance(node.body.children[-1], Return):
-                self.assembly_code.append('  pop rdi ; Implicit exit code');
+                self.assembly_code.append('  pop rdi');
                 self.assembly_code.append('  mov rax, 60');
                 self.assembly_code.append('  syscall')
             self.assembly_code.append('  ; Epilogue');
-            self.assembly_code.append('  add rsp, 32');
+            self.assembly_code.append('  add rsp, 64');
             self.assembly_code.append('  pop rbp')
 
     def visit_Block(self, node):
@@ -76,7 +80,7 @@ class CodeGenerator(NodeVisitor):
         var_name = node.var_node.value
         if var_name in self.symbol_table and self.symbol_table[var_name]['offset'] > self.stack_index:
             raise Exception(f"Variable '{var_name}' already declared in this scope.")
-        self.symbol_table[var_name] = {'offset': self.stack_index, 'type': node.type_node.value}
+        self.symbol_table[var_name] = {'offset': self.stack_index, 'type': node.type_node}
         self.visit(node.assign_node)
         self.assembly_code.append(f'  ; VarDecl: {var_name}');
         self.assembly_code.append('  pop rax');
@@ -84,14 +88,58 @@ class CodeGenerator(NodeVisitor):
         self.stack_index -= 8
 
     def visit_Assign(self, node):
-        var_name = node.left.value
-        if var_name not in self.symbol_table: raise Exception(f"Assigning to undeclared variable '{var_name}'")
-        self.visit(node.right);
-        self.assembly_code.append(f'  ; Assign: {var_name}');
-        self.assembly_code.append('  pop rax')
-        stack_offset = self.symbol_table[var_name]['offset'];
-        self.assembly_code.append(f'  mov [rbp{stack_offset}], rax')
+        self.visit(node.right)  # Value is now on the stack
 
+        # If assigning to 'deref p', left is a UnaryOp
+        if isinstance(node.left, UnaryOp) and node.left.op.type == TokenType.KW_DEREF:
+            self.visit(node.left.expr)  # Address is now on the stack
+            self.assembly_code.append('  pop rbx ; Address')
+            self.assembly_code.append('  pop rax ; Value')
+            self.assembly_code.append('  mov [rbx], rax')
+        # If assigning to a variable 'p'
+        elif isinstance(node.left, Var):
+            var_name = node.left.value
+            if var_name not in self.symbol_table: raise Exception(f"Assigning to undeclared variable '{var_name}'")
+            stack_offset = self.symbol_table[var_name]['offset']
+            self.assembly_code.append('  pop rax ; Value')
+            self.assembly_code.append(f'  mov [rbp{stack_offset}], rax')
+        else:
+            raise Exception("Invalid left-hand side in assignment")
+
+    def visit_UnaryOp(self, node):
+        op_type = node.op.type
+        if op_type == TokenType.KW_ADDR:
+            if not isinstance(node.expr, Var): raise Exception("'addr' can only be used on variables")
+            var_name = node.expr.value
+            if var_name not in self.symbol_table: raise Exception(f"Undeclared variable '{var_name}'")
+            offset = self.symbol_table[var_name]['offset']
+            self.assembly_code.append(f'  lea rax, [rbp{offset}]')
+            self.assembly_code.append('  push rax')
+            return
+        if op_type == TokenType.KW_DEREF:
+            self.visit(node.expr)  # This pushes the address onto the stack
+            self.assembly_code.append('  pop rax')
+            self.assembly_code.append('  mov rax, [rax]')  # Dereference the address in rax
+            self.assembly_code.append('  push rax')
+            return
+
+        self.visit(node.expr)
+        self.assembly_code.append('  pop rax')
+        if op_type == TokenType.KW_BNOT:
+            self.assembly_code.append('  not rax')
+        elif op_type == TokenType.KW_NOT:
+            self.assembly_code.append('  cmp rax, 0');
+            self.assembly_code.append('  sete al');
+            self.assembly_code.append('  movzx rax, al')
+        elif op_type == TokenType.KW_NBNOT:
+            pass
+        elif op_type == TokenType.KW_NNOT:
+            self.assembly_code.append('  cmp rax, 0');
+            self.assembly_code.append('  setne al');
+            self.assembly_code.append('  movzx rax, al')
+        self.assembly_code.append('  push rax')
+
+    # ... (The rest of the CodeGenerator class is unchanged) ...
     def visit_IfExpr(self, node):
         label_num = self._new_label();
         else_label = f"L_else_{label_num}";
@@ -178,27 +226,8 @@ class CodeGenerator(NodeVisitor):
         self.assembly_code.append(f'  ; Pushing variable {var_name}');
         self.assembly_code.append(f'  push qword [rbp{stack_offset}]')
 
-    def visit_UnaryOp(self, node):
-        self.visit(node.expr)
-        op_type = node.op.type
-        self.assembly_code.append('  pop rax')
-        if op_type == TokenType.KW_BNOT:
-            self.assembly_code.append('  not rax')
-        elif op_type == TokenType.KW_NOT:
-            self.assembly_code.append('  cmp rax, 0');
-            self.assembly_code.append('  sete al');
-            self.assembly_code.append('  movzx rax, al')
-        elif op_type == TokenType.KW_NBNOT:
-            pass  # not(not(x)) is x
-        elif op_type == TokenType.KW_NNOT:
-            self.assembly_code.append('  cmp rax, 0');
-            self.assembly_code.append('  setne al');
-            self.assembly_code.append('  movzx rax, al')
-        self.assembly_code.append('  push rax')
-
     def visit_BinOp(self, node):
         op_type = node.op.type
-        # --- Logical operators with short-circuiting ---
         if op_type in (TokenType.KW_AND, TokenType.KW_NAND):
             label_num = self._new_label();
             end_label = f"L_logic_end_{label_num}"
@@ -249,11 +278,10 @@ class CodeGenerator(NodeVisitor):
             self.assembly_code.append('  movzx rax, cl');
             self.assembly_code.append('  push rax')
             return
-
         if op_type == TokenType.TYPE_EQUAL:
             left_type = self._get_node_type(node.left);
             right_type = self._get_node_type(node.right)
-            result = 1 if left_type == right_type else 0
+            result = 1 if repr(left_type) == repr(right_type) else 0
             self.assembly_code.append(f'  ; Compile-time type check: {left_type} === {right_type}');
             self.assembly_code.append(f'  push {result}')
             return
@@ -321,4 +349,3 @@ class CodeGenerator(NodeVisitor):
             '  inc r9', '  test rax, rax', '  jnz print_int_loop',
             'print_int_write:', '  mov rax, 1', '  mov rsi, rdi', '  mov rdx, r9', '  mov rdi, 1', '  syscall', '  ret',
             ''])
-

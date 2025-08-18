@@ -36,6 +36,9 @@ class TokenType(Enum):
     KW_FOR = 'for'
     KW_BREAK = 'break'
     KW_CONTINUE = 'continue'
+    KW_PTR = 'ptr'
+    KW_ADDR = 'addr'
+    KW_DEREF = 'deref'
 
     # Logical and bitwise keywords
     ## Logical
@@ -96,6 +99,11 @@ RESERVED_KEYWORDS = {
     'for': TokenType.KW_FOR,
     'break': TokenType.KW_BREAK,
     'continue': TokenType.KW_CONTINUE,
+
+    # Pointers
+    'ptr': TokenType.KW_PTR,
+    'addr': TokenType.KW_ADDR,
+    'deref': TokenType.KW_DEREF,
 
     # Logical and bitwise
     'or': TokenType.KW_OR,

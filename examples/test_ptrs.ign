@@ -1,0 +1,12 @@
+int main() {
+    mut int x = 10;
+    mut ptr int p = addr x;
+
+    print(deref p); // Expected: 10
+
+    deref p = 42; // Change the value of x through the pointer
+
+    print(x); // Expected: 42
+
+    return 0;
+}
