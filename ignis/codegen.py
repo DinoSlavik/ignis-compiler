@@ -132,32 +132,21 @@ class CodeGenerator(NodeVisitor):
         old_symbol_table = self.symbol_table.copy();
         old_stack_index = self.stack_index
         label_num = self._new_label()
-        start_label = f"L_for_start_{label_num}"
-        continue_label = f"L_for_continue_{label_num}"
+        start_label = f"L_for_start_{label_num}";
+        continue_label = f"L_for_continue_{label_num}";
         end_label = f"L_for_end_{label_num}"
-
-        if node.init:
-            self.visit(node.init)
-            # BUG FIX: The init part is a statement and leaves nothing on the stack.
-            # Do NOT pop a result.
-
+        if node.init: self.visit(node.init)
         self.assembly_code.append(f'{start_label}:')
         if node.condition:
             self.visit(node.condition)
             self.assembly_code.append('  pop rax');
             self.assembly_code.append('  cmp rax, 0')
             self.assembly_code.append(f'  je {end_label}')
-
         self.loop_labels_stack.append((continue_label, end_label))
         self.visit(node.body)
         self.loop_labels_stack.pop()
-
         self.assembly_code.append(f'{continue_label}:')
-        if node.increment:
-            self.visit(node.increment)
-            # BUG FIX: The increment part is a statement and leaves nothing on the stack.
-            # Do NOT pop a result.
-
+        if node.increment: self.visit(node.increment)
         self.assembly_code.append(f'  jmp {start_label}')
         self.assembly_code.append(f'{end_label}:')
         self.symbol_table = old_symbol_table;
@@ -170,8 +159,8 @@ class CodeGenerator(NodeVisitor):
 
     def visit_ContinueStmt(self, node):
         if not self.loop_labels_stack: raise Exception("'continue' outside of a loop")
-        start_label, _ = self.loop_labels_stack[-1]
-        self.assembly_code.append(f'  jmp {start_label}')
+        continue_label, _ = self.loop_labels_stack[-1]
+        self.assembly_code.append(f'  jmp {continue_label}')
 
     def visit_Num(self, node):
         self.assembly_code.append(f'  ; Pushing number {node.value}'); self.assembly_code.append(f'  push {node.value}')
@@ -185,8 +174,90 @@ class CodeGenerator(NodeVisitor):
         self.assembly_code.append(f'  ; Pushing variable {var_name}');
         self.assembly_code.append(f'  push qword [rbp{stack_offset}]')
 
+    def visit_UnaryOp(self, node):
+        self.visit(node.expr)
+        op_type = node.op.type
+        self.assembly_code.append('  pop rax')
+        if op_type == TokenType.KW_BNOT:
+            self.assembly_code.append('  not rax')
+        elif op_type == TokenType.KW_NOT:
+            self.assembly_code.append('  cmp rax, 0')
+            self.assembly_code.append('  sete al')
+            self.assembly_code.append('  movzx rax, al')
+        elif op_type == TokenType.KW_NBNOT:
+            # bnot(bnot(x)) is just x, so this is a no-op
+            pass
+        elif op_type == TokenType.KW_NNOT:
+            # not(not(x)) is equivalent to checking if x is not zero
+            self.assembly_code.append('  cmp rax, 0')
+            self.assembly_code.append('  setne al')
+            self.assembly_code.append('  movzx rax, al')
+        self.assembly_code.append('  push rax')
+
     def visit_BinOp(self, node):
         op_type = node.op.type
+        # --- Short-circuiting for 'and' and 'or' ---
+        if op_type == TokenType.KW_AND:
+            label_num = self._new_label();
+            false_label = f"L_and_false_{label_num}";
+            endif_label = f"L_and_endif_{label_num}"
+            self.visit(node.left);
+            self.assembly_code.append('  pop rax');
+            self.assembly_code.append('  cmp rax, 0')
+            self.assembly_code.append(f'  je {false_label}')
+            self.visit(node.right);
+            self.assembly_code.append('  pop rax');
+            self.assembly_code.append('  cmp rax, 0')
+            self.assembly_code.append(f'  je {false_label}')
+            self.assembly_code.append('  mov rax, 1');
+            self.assembly_code.append(f'  jmp {endif_label}')
+            self.assembly_code.append(f'{false_label}:');
+            self.assembly_code.append('  mov rax, 0')
+            self.assembly_code.append(f'{endif_label}:');
+            self.assembly_code.append('  push rax')
+            return
+        if op_type == TokenType.KW_OR:
+            label_num = self._new_label();
+            true_label = f"L_or_true_{label_num}";
+            endif_label = f"L_or_endif_{label_num}"
+            self.visit(node.left);
+            self.assembly_code.append('  pop rax');
+            self.assembly_code.append('  cmp rax, 0')
+            self.assembly_code.append(f'  jne {true_label}')
+            self.visit(node.right);
+            self.assembly_code.append('  pop rax');
+            self.assembly_code.append('  cmp rax, 0')
+            self.assembly_code.append(f'  jne {true_label}')
+            self.assembly_code.append('  mov rax, 0');
+            self.assembly_code.append(f'  jmp {endif_label}')
+            self.assembly_code.append(f'{true_label}:');
+            self.assembly_code.append('  mov rax, 1')
+            self.assembly_code.append(f'{endif_label}:');
+            self.assembly_code.append('  push rax')
+            return
+
+        if op_type == TokenType.KW_XOR or op_type == TokenType.KW_XNOR:
+            # Logical XOR doesn't short-circuit, so we evaluate both sides to 0 or 1
+            # and then perform a bitwise XOR.
+            self.visit(node.left)
+            self.assembly_code.append('  pop rax')
+            self.assembly_code.append('  cmp rax, 0')
+            self.assembly_code.append('  setne cl ; cl = (left != 0)')
+
+            self.visit(node.right)
+            self.assembly_code.append('  pop rax')
+            self.assembly_code.append('  cmp rax, 0')
+            self.assembly_code.append('  setne dl ; dl = (right != 0)')
+
+            self.assembly_code.append('  xor cl, dl ; cl = cl ^ dl')
+            if op_type == TokenType.KW_XNOR:
+                self.assembly_code.append('  xor cl, 1 ; Invert for XNOR')
+
+            self.assembly_code.append('  movzx rax, cl')
+            self.assembly_code.append('  push rax')
+            return
+
+        # --- Standard and Bitwise operators ---
         if op_type == TokenType.TYPE_EQUAL:
             left_type = self._get_node_type(node.left);
             right_type = self._get_node_type(node.right)
@@ -207,22 +278,33 @@ class CodeGenerator(NodeVisitor):
             self.assembly_code.append('  imul rax, rbx')
         elif op_type == TokenType.DIVIDE:
             self.assembly_code.append('  cqo'); self.assembly_code.append('  idiv rbx')
-        elif op_type in (TokenType.EQUAL, TokenType.NOT_EQUAL, TokenType.LESS, TokenType.LESS_EQUAL, TokenType.GREATER,
-                         TokenType.GREATER_EQUAL):
+        elif op_type in (TokenType.EQUAL, TokenType.NOT_EQUAL, TokenType.LESS, TokenType.LESS_EQUAL, TokenType.GREATER, TokenType.GREATER_EQUAL):
             self.assembly_code.append('  cmp rax, rbx')
-            if op_type == TokenType.EQUAL:
-                self.assembly_code.append('  sete al')
-            elif op_type == TokenType.NOT_EQUAL:
-                self.assembly_code.append('  setne al')
-            elif op_type == TokenType.LESS:
-                self.assembly_code.append('  setl al')
-            elif op_type == TokenType.LESS_EQUAL:
-                self.assembly_code.append('  setle al')
-            elif op_type == TokenType.GREATER:
-                self.assembly_code.append('  setg al')
-            elif op_type == TokenType.GREATER_EQUAL:
-                self.assembly_code.append('  setge al')
+        if op_type == TokenType.EQUAL:
+            self.assembly_code.append('  sete al')
+        elif op_type == TokenType.NOT_EQUAL:
+            self.assembly_code.append('  setne al')
+        elif op_type == TokenType.LESS:
+            self.assembly_code.append('  setl al')
+        elif op_type == TokenType.LESS_EQUAL:
+            self.assembly_code.append('  setle al')
+        elif op_type == TokenType.GREATER:
+            self.assembly_code.append('  setg al')
+        elif op_type == TokenType.GREATER_EQUAL:
+            self.assembly_code.append('  setge al')
             self.assembly_code.append('  movzx rax, al')
+        elif op_type in (TokenType.KW_BAND, TokenType.KW_NAND, TokenType.KW_NBAND):
+            self.assembly_code.append('  and rax, rbx')
+        elif op_type in (TokenType.KW_BOR, TokenType.KW_NOR, TokenType.KW_NBOR):
+            self.assembly_code.append('  or rax, rbx')
+        elif op_type in (TokenType.KW_BXOR, TokenType.KW_XNOR, TokenType.KW_NBXOR):
+            self.assembly_code.append('  xor rax, rbx')
+
+        # --- Оновлена логіка для інвертованих операцій ---
+        if op_type in (TokenType.KW_NAND, TokenType.KW_NOR, TokenType.KW_XNOR, TokenType.KW_NBAND, TokenType.KW_NBOR,
+                       TokenType.KW_NBXOR):
+            self.assembly_code.append('  not rax')
+
         self.assembly_code.append('  push rax')
 
     def visit_FunctionCall(self, node):

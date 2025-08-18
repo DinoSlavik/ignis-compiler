@@ -68,6 +68,11 @@ class BinOp(AST):
     def __init__(self, left, op, right): self.left = left; self.op = op; self.right = right
     def __repr__(self): return f"BinOp(left={self.left}, op='{self.op.value}', right={self.right})"
 
+class UnaryOp(AST):
+    """Represents a unary operation like 'not' or 'bnot'."""
+    def __init__(self, op, expr): self.op, self.expr = op, expr
+    def __repr__(self): return f"UnaryOp(op='{self.op.value}', expr={self.expr})"
+
 class FunctionCall(AST):
     def __init__(self, name, args): self.name = name; self.args = args
     def __repr__(self): return f"    FunctionCall(name='{self.name}', args={self.args})"

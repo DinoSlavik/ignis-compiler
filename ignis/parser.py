@@ -1,7 +1,6 @@
 from lexer import TokenType
 from ast_nodes import *
 
-
 class Parser:
     def __init__(self, lexer, source_code):
         self.lexer = lexer
@@ -17,17 +16,11 @@ class Parser:
     def error(self, message, token=None):
         token = token or self.current_token
         line_num, col_num = token.line, token.col
-        header = f"E001: {message}";
-        location = f"--> {self.lexer.file_path}:{line_num}:{col_num}"
-        snippet = "";
-        start_line = max(0, line_num - 3);
-        end_line = min(len(self.source_lines), line_num + 2)
+        header = f"E001: {message}"; location = f"--> {self.lexer.file_path}:{line_num}:{col_num}"
+        snippet = ""; start_line = max(0, line_num - 3); end_line = min(len(self.source_lines), line_num + 2)
         for i in range(start_line, end_line):
-            line = self.source_lines[i];
-            line_number_str = f"{i + 1:4} | ";
-            snippet += f"{line_number_str}{line}\n"
-            if i + 1 == line_num: pointer_padding = ' ' * (
-                        len(line_number_str) + col_num - 1); snippet += f"{pointer_padding}^\n"
+            line = self.source_lines[i]; line_number_str = f"{i + 1:4} | "; snippet += f"{line_number_str}{line}\n"
+            if i + 1 == line_num: pointer_padding = ' ' * (len(line_number_str) + col_num - 1); snippet += f"{pointer_padding}^\n"
         hint = ""
         if "expected" in message and "SEMICOLON" in message: hint = "Hint: Did you forget a ';' at the end of a statement?"
         full_error = f"{header}\n{location}\n\n{snippet}"
@@ -43,75 +36,103 @@ class Parser:
             got_str = self._format_token_type(self.current_token.type)
             self.error(f"Unexpected token: expected {expected_str}, but got {got_str}")
 
-    # ... (Most of the parser remains the same) ...
-    def type_spec(self):
-        token = self.current_token
-        if token.type == TokenType.KW_INT: self.eat(TokenType.KW_INT); return Type(token)
-        self.error("Expected a type specifier")
-
     def factor(self):
         token = self.current_token
-        if token.type == TokenType.INTEGER:
-            self.eat(TokenType.INTEGER); return Num(token)
-        elif token.type == TokenType.LPAREN:
-            self.eat(TokenType.LPAREN); node = self.expr(); self.eat(TokenType.RPAREN); return node
-        elif token.type == TokenType.LBRACE:
-            return self.block()
-        elif token.type == TokenType.KW_IF:
-            return self.if_expression()
+        if token.type == TokenType.INTEGER: self.eat(TokenType.INTEGER); return Num(token)
+        elif token.type == TokenType.LPAREN: self.eat(TokenType.LPAREN); node = self.expr(); self.eat(TokenType.RPAREN); return node
+        elif token.type == TokenType.LBRACE: return self.block()
+        elif token.type == TokenType.KW_IF: return self.if_expression()
         elif token.type == TokenType.IDENTIFIER:
-            if self.peek_token.type == TokenType.LPAREN:
-                return self.function_call()
-            else:
-                self.eat(TokenType.IDENTIFIER); return Var(token)
+            if self.peek_token.type == TokenType.LPAREN: return self.function_call()
+            else: self.eat(TokenType.IDENTIFIER); return Var(token)
         self.error(f"Invalid factor in expression")
 
+    def unary_expr(self):
+        token = self.current_token
+        UNARY_OPS = (TokenType.KW_NOT, TokenType.KW_BNOT, TokenType.KW_NNOT, TokenType.KW_NBNOT)
+        if token.type in UNARY_OPS:
+            self.eat(token.type)
+            return UnaryOp(op=token, expr=self.unary_expr())
+        return self.factor()
+
     def term(self):
-        node = self.factor()
+        node = self.unary_expr()
         while self.current_token.type in (TokenType.MULTIPLY, TokenType.DIVIDE):
             token = self.current_token
-            if token.type == TokenType.MULTIPLY:
-                self.eat(TokenType.MULTIPLY)
-            elif token.type == TokenType.DIVIDE:
-                self.eat(TokenType.DIVIDE)
-            node = BinOp(left=node, op=token, right=self.factor())
+            if token.type == TokenType.MULTIPLY: self.eat(TokenType.MULTIPLY)
+            elif token.type == TokenType.DIVIDE: self.eat(TokenType.DIVIDE)
+            node = BinOp(left=node, op=token, right=self.unary_expr())
         return node
 
     def additive_expr(self):
         node = self.term()
         while self.current_token.type in (TokenType.PLUS, TokenType.MINUS):
             token = self.current_token
-            if token.type == TokenType.PLUS:
-                self.eat(TokenType.PLUS)
-            elif token.type == TokenType.MINUS:
-                self.eat(TokenType.MINUS)
+            if token.type == TokenType.PLUS: self.eat(TokenType.PLUS)
+            elif token.type == TokenType.MINUS: self.eat(TokenType.MINUS)
             node = BinOp(left=node, op=token, right=self.term())
         return node
 
     def comparison_expr(self):
         node = self.additive_expr()
-        COMPARISON_OPS = (TokenType.EQUAL, TokenType.NOT_EQUAL, TokenType.LESS, TokenType.LESS_EQUAL, TokenType.GREATER,
-                          TokenType.GREATER_EQUAL, TokenType.TYPE_EQUAL)
+        COMPARISON_OPS = (TokenType.EQUAL, TokenType.NOT_EQUAL, TokenType.LESS, TokenType.LESS_EQUAL, TokenType.GREATER, TokenType.GREATER_EQUAL, TokenType.TYPE_EQUAL)
         if self.current_token.type in COMPARISON_OPS:
-            op = self.current_token;
-            self.eat(op.type);
-            right = self.additive_expr()
+            op = self.current_token; self.eat(op.type); right = self.additive_expr()
             node = BinOp(left=node, op=op, right=right)
         return node
 
-    def expr(self):
+    def bitwise_and_expr(self):
         node = self.comparison_expr()
+        BITWISE_AND_OPS = (TokenType.KW_BAND, TokenType.KW_NBAND)
+        while self.current_token.type in BITWISE_AND_OPS:
+            op = self.current_token; self.eat(op.type)
+            node = BinOp(left=node, op=op, right=self.comparison_expr())
+        return node
+
+    def bitwise_xor_expr(self):
+        node = self.bitwise_and_expr()
+        BITWISE_XOR_OPS = (TokenType.KW_BXOR, TokenType.KW_XNOR, TokenType.KW_NBXOR)
+        while self.current_token.type in BITWISE_XOR_OPS:
+            op = self.current_token; self.eat(op.type)
+            node = BinOp(left=node, op=op, right=self.bitwise_and_expr())
+        return node
+
+    def bitwise_or_expr(self):
+        node = self.bitwise_xor_expr()
+        BITWISE_OR_OPS = (TokenType.KW_BOR, TokenType.KW_NBOR)
+        while self.current_token.type in BITWISE_OR_OPS:
+            op = self.current_token; self.eat(op.type)
+            node = BinOp(left=node, op=op, right=self.bitwise_xor_expr())
+        return node
+
+    def logical_and_expr(self):
+        node = self.bitwise_or_expr()
+        while self.current_token.type == TokenType.KW_AND:
+            op = self.current_token; self.eat(op.type)
+            node = BinOp(left=node, op=op, right=self.bitwise_or_expr())
+        return node
+
+    def logical_or_expr(self):
+        node = self.logical_and_expr()
+        LOGICAL_OR_OPS = (TokenType.KW_OR, TokenType.KW_XOR, TokenType.KW_XNOR)
+        while self.current_token.type in LOGICAL_OR_OPS:
+            op = self.current_token; self.eat(op.type)
+            node = BinOp(left=node, op=op, right=self.logical_and_expr())
+        return node
+
+    def expr(self):
+        node = self.logical_or_expr()
         if self.current_token.type == TokenType.KW_IF:
-            self.eat(TokenType.KW_IF);
-            condition = self.comparison_expr();
-            self.eat(TokenType.KW_ELSE)
-            else_expr = self.expr();
-            if_block = Block();
-            if_block.children.append(node)
-            else_block = Block();
-            else_block.children.append(else_expr)
+            self.eat(TokenType.KW_IF); condition = self.expr(); self.eat(TokenType.KW_ELSE)
+            else_expr = self.expr(); if_block = Block(); if_block.children.append(node)
+            else_block = Block(); else_block.children.append(else_expr)
             return IfExpr(condition=condition, if_block=if_block, else_block=else_block)
         return node
+
+    def type_spec(self):
+        token = self.current_token
+        if token.type == TokenType.KW_INT: self.eat(TokenType.KW_INT); return Type(token)
+        self.error("Expected a type specifier")
 
     def if_expression(self):
         if self.current_token.type == TokenType.KW_IF:

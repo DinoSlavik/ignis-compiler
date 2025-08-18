@@ -37,6 +37,28 @@ class TokenType(Enum):
     KW_BREAK = 'break'
     KW_CONTINUE = 'continue'
 
+    # Logical and bitwise keywords
+    ## Logical
+    KW_OR = 'or'
+    KW_AND = 'and'
+    KW_NOT = 'not'
+    KW_XOR = 'xor'
+    ## Bitwise
+    KW_BOR = 'bor'
+    KW_BAND = 'band'
+    KW_BNOT = 'bnot'
+    KW_BXOR = 'bxor'
+    ## Inverted logical
+    KW_NOR = 'nor'
+    KW_NAND = 'nand'
+    KW_NNOT = 'nnot' # Kek
+    KW_XNOR = 'xnor'
+    ## Inverted bitwise
+    KW_NBOR = 'nbor'
+    KW_NBAND = 'nband'
+    KW_NBNOT = 'nbnot' # Kek
+    KW_NBXOR = 'nbxor'
+
     # Literals and identifiers
     IDENTIFIER = 'IDENTIFIER'
     INTEGER = 'INTEGER'
@@ -62,14 +84,36 @@ RESERVED_KEYWORDS = {
     'mut': TokenType.KW_MUT,
     'const': TokenType.KW_CONST,
     'return': TokenType.KW_RETURN,
+
+    # Ifs
     'if': TokenType.KW_IF,
     'else': TokenType.KW_ELSE,
     'elif': TokenType.KW_ELIF,
+
+    # Loops
     'while': TokenType.KW_WHILE,
     'loop': TokenType.KW_LOOP,
     'for': TokenType.KW_FOR,
     'break': TokenType.KW_BREAK,
     'continue': TokenType.KW_CONTINUE,
+
+    # Logical and bitwise
+    'or': TokenType.KW_OR,
+    'and': TokenType.KW_AND,
+    'not': TokenType.KW_NOT,
+    'xor': TokenType.KW_XOR,
+    'bor': TokenType.KW_BOR,
+    'band': TokenType.KW_BAND,
+    'bnot': TokenType.KW_BNOT,
+    'bxor': TokenType.KW_BXOR,
+    'nor': TokenType.KW_NOR,
+    'nand': TokenType.KW_NAND,
+    'nnot': TokenType.KW_NNOT,
+    'xnor': TokenType.KW_XNOR,
+    'nbor': TokenType.KW_NBOR,
+    'nband': TokenType.KW_NBAND,
+    'nbnot': TokenType.KW_NBNOT,
+    'nbxor': TokenType.KW_NBXOR,
 }
 
 
