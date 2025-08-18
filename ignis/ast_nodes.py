@@ -1,10 +1,24 @@
+from lexer import TokenType
+
 class AST: pass
 class Program(AST):
     def __init__(self, declarations): self.declarations = declarations
     def __repr__(self): return f"Program(\n{', '.join(map(repr, self.declarations))}\n)"
 class FunctionDecl(AST):
-    def __init__(self, type_node, func_name, body): self.type_node, self.func_name, self.body = type_node, func_name, body
-    def __repr__(self): return f"  FunctionDecl(name='{self.func_name}', body={self.body})"
+    def __init__(self, type_node, func_name, params, body): self.type_node, self.func_name, self.params, self.body = type_node, func_name, params, body
+    def __repr__(self): return f"  FunctionDecl(name='{self.func_name}', params={self.params}, body={self.body})"
+class StructDef(AST):
+    def __init__(self, name, fields): self.name, self.fields = name, fields
+    def __repr__(self): return f"  StructDef(name='{self.name}', fields={self.fields})"
+class Param(AST):
+    def __init__(self, type_node, var_node): self.type_node, self.var_node = type_node, var_node
+    def __repr__(self): return f"Param({self.type_node}, {self.var_node.value})"
+class Field(AST):
+    def __init__(self, type_node, var_node): self.type_node, self.var_node = type_node, var_node
+    def __repr__(self): return f"Field({self.type_node}, {self.var_node.value})"
+class MemberAccess(AST):
+    def __init__(self, left, right): self.left, self.right = left, right
+    def __repr__(self): return f"MemberAccess({self.left}, '{self.right.value}')"
 class VarDecl(AST):
     def __init__(self, type_node, var_node, assign_node, is_mutable): self.type_node, self.var_node, self.assign_node, self.is_mutable = type_node, var_node, assign_node, is_mutable
     def __repr__(self): mut_str = 'mut ' if self.is_mutable else ''; return f"    VarDecl({self.type_node} {self.var_node.value} = {self.assign_node})"
@@ -29,16 +43,14 @@ class ContinueStmt(AST):
     def __repr__(self): return "    ContinueStmt"
 class Type(AST):
     def __init__(self, token, pointer_level=0):
-        self.token = token
-        self.value = token.value
-        self.pointer_level = pointer_level
-    def __repr__(self):
-        return f"{'ptr ' * self.pointer_level}{self.value}"
+        self.token, self.value, self.pointer_level = token, token.value if token else "struct", pointer_level
+    def __repr__(self): return f"{'ptr ' * self.pointer_level}{self.value}"
 class Assign(AST):
     def __init__(self, left, op, right): self.left, self.op, self.right = left, op, right
     def __repr__(self):
-        # Handle assignment to dereferenced pointer
-        left_repr = f"deref {self.left.expr}" if isinstance(self.left, UnaryOp) and self.left.op.type == TokenType.KW_DEREF else self.left.value
+        left_repr = self.left
+        if isinstance(self.left, UnaryOp) and self.left.op.type == TokenType.KW_DEREF: left_repr = f"deref {self.left.expr}"
+        elif isinstance(self.left, Var): left_repr = self.left.value
         return f"    Assign({left_repr} = {self.right})"
 class Var(AST):
     def __init__(self, token): self.token, self.value = token, token.value
@@ -53,8 +65,8 @@ class UnaryOp(AST):
     def __init__(self, op, expr): self.op, self.expr = op, expr
     def __repr__(self): return f"UnaryOp(op='{self.op.value}', expr={self.expr})"
 class FunctionCall(AST):
-    def __init__(self, name, args): self.name, self.args = name, args
-    def __repr__(self): return f"    FunctionCall(name='{self.name}', args={self.args})"
+    def __init__(self, name_node, args): self.name_node, self.args = name_node, args
+    def __repr__(self): return f"    FunctionCall(name='{self.name_node.value}', args={self.args})"
 class Block(AST):
     def __init__(self): self.children = []
     def __repr__(self): children_repr = '\n'.join(map(repr, self.children)); indented_children = "      " + children_repr.replace("\n", "\n      "); return f"Block([\n{indented_children}\n    ])"

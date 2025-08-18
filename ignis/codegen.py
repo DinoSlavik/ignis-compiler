@@ -1,73 +1,133 @@
 from ast_nodes import *
-from lexer import TokenType
+from lexer import TokenType, Token
 
 
 class NodeVisitor:
-    def visit(self, node):
+    def visit(self, node, *args, **kwargs):
         method_name = 'visit_' + type(node).__name__
         visitor = getattr(self, method_name, self.generic_visit)
-        return visitor(node)
+        return visitor(node, *args, **kwargs)
 
-    def generic_visit(self, node): raise Exception(f'No visit_{type(node).__name__} method')
-
+    def generic_visit(self, node, *args, **kwargs): self.error("E003", f"Unsupported AST node '{type(node).__name__}'", node)
 
 class CodeGenerator(NodeVisitor):
-    def __init__(self):
+    def __init__(self, reporter):
+        self.reporter = reporter
         self.assembly_code = []
+        self.data_section = []
         self.symbol_table = {}
-        self.stack_index = -8
+        self.struct_table = {}
+        self.current_function = None
+        self.stack_index = 0
         self.label_counter = 0
         self.loop_labels_stack = []
+
+    def error(self, code, message, node):
+        self.reporter.error(code, message, self._get_token_from_node(node))
+
+    def warning(self, code, message, node):
+        self.reporter.warning(code, message, self._get_token_from_node(node))
+
+    def _get_token_from_node(self, node):
+        if hasattr(node, 'token'): return node.token
+        if hasattr(node, 'op'): return node.op
+        if hasattr(node, 'name_node'): return node.name_node.token
+        if hasattr(node, 'var_node'): return node.var_node.token
+        if isinstance(node, MemberAccess): return self._get_token_from_node(node.left)
+        return None
 
     def _new_label(self):
         self.label_counter += 1
         return self.label_counter
 
+    def _get_type_size(self, type_node):
+        if type_node.pointer_level > 0: return 8
+        if type_node.value == 'int': return 8
+        if type_node.value in self.struct_table:
+            return self.struct_table[type_node.value]['size']
+        self.error("E006", f"Unknown type '{type_node.value}'", type_node.token)
+
     def _get_node_type(self, node):
-        if isinstance(node, Num): return Type(None, 0)  # Base int type
+        if isinstance(node, Num): return Type(Token(TokenType.KW_INT, 'int'))
         if isinstance(node, Var):
             var_name = node.value
-            if var_name in self.symbol_table:
-                return self.symbol_table[var_name]['type']
-            else:
-                if var_name == "VERSION": return Type(None, 0)
-                raise Exception(f"Cannot determine type of undeclared variable '{var_name}'")
+            if var_name in self.symbol_table: return self.symbol_table[var_name]['type']
+            self.error("E004", f"Undeclared variable '{var_name}'", node)
         if isinstance(node, UnaryOp):
-            if node.op.type == TokenType.KW_ADDR:
-                base_type = self._get_node_type(node.expr)
-                return Type(base_type.token, base_type.pointer_level + 1)
+            base_type = self._get_node_type(node.expr)
+            if node.op.type == TokenType.KW_ADDR: return Type(base_type.token, base_type.pointer_level + 1)
             if node.op.type == TokenType.KW_DEREF:
-                base_type = self._get_node_type(node.expr)
-                if base_type.pointer_level == 0: raise Exception("Cannot dereference a non-pointer type")
+                if base_type.pointer_level == 0: self.error("E005", "Cannot dereference a non-pointer type", node)
                 return Type(base_type.token, base_type.pointer_level - 1)
-        return Type(None, 0)  # Default to int for now
+        if isinstance(node, MemberAccess):
+            struct_type = self._get_node_type(node.left)
+            is_ptr = struct_type.pointer_level > 0
+            struct_name = struct_type.token.value if is_ptr else struct_type.value
+            if struct_name not in self.struct_table: self.error("E006", f"Unknown struct type '{struct_name}'", node)
+            field_name = node.right.value
+            if field_name not in self.struct_table[struct_name]['fields']: self.error("E007",
+                                                                                      f"Struct '{struct_name}' has no field '{field_name}'",
+                                                                                      node)
+            return self.struct_table[struct_name]['fields'][field_name]['type']
+        return Type(Token(TokenType.KW_INT, 'int'))
 
     def generate(self, tree):
-        self.assembly_code.append('section .bss');
-        self.assembly_code.append('  print_buf resb 32\n')
-        self.assembly_code.append('section .text');
-        self.assembly_code.append('global _start')
-        self._add_print_function();
-        self.visit(tree);
-        return '\n'.join(self.assembly_code)
+        self.visit(tree)
+        full_asm = []
+        if self.data_section: full_asm.append('section .data'); full_asm.extend(self.data_section)
+        full_asm.append('section .bss');
+        full_asm.append('  print_buf resb 32\n')
+        full_asm.append('section .text');
+        full_asm.append('global _start')
+        self._add_print_function()
+        full_asm.extend(self.assembly_code)
+        return '\n'.join(full_asm)
 
     def visit_Program(self, node):
-        for decl in node.declarations: self.visit(decl)
+        for decl in node.declarations:
+            if isinstance(decl, StructDef): self.visit(decl)
+        for decl in node.declarations:
+            if not isinstance(decl, StructDef): self.visit(decl)
+
+    def visit_StructDef(self, node):
+        offset = 0;
+        fields = {}
+        for field in node.fields:
+            field_name = field.var_node.value;
+            field_type = field.type_node
+            size = self._get_type_size(field_type)
+            fields[field_name] = {'type': field_type, 'offset': offset};
+            offset += size
+        self.struct_table[node.name] = {'fields': fields, 'size': offset}
 
     def visit_FunctionDecl(self, node):
+        self.current_function = node.func_name
+        func_label = '_start' if node.func_name == 'main' else node.func_name
+        self.assembly_code.append(f'{func_label}:')
+        self.assembly_code.append('  push rbp');
+        self.assembly_code.append('  mov rbp, rsp')
+        local_vars_space = 256;
+        self.assembly_code.append(f'  sub rsp, {local_vars_space}')
+        self.symbol_table = {};
+        self.stack_index = 0
+        arg_registers = ['rdi', 'rsi', 'rdx', 'rcx', 'r8', 'r9']
+        for i, param in enumerate(node.params):
+            param_name = param.var_node.value;
+            self.stack_index -= 8
+            self.symbol_table[param_name] = {'type': param.type_node, 'offset': self.stack_index}
+            self.assembly_code.append(f'  mov [rbp{self.stack_index}], {arg_registers[i]}')
+        self.visit(node.body)
+        if not node.body.children or not isinstance(node.body.children[-1], Return):
+            self.assembly_code.append('  pop rax')
+        self.assembly_code.append(f'.L_ret_{node.func_name}:')
+        self.assembly_code.append('  mov rsp, rbp');
+        self.assembly_code.append('  pop rbp')
         if node.func_name == 'main':
-            self.assembly_code.append('_start:');
-            self.assembly_code.append('  push rbp');
-            self.assembly_code.append('  mov rbp, rsp')
-            self.assembly_code.append('  sub rsp, 64 ; Allocate larger stack frame for locals')
-            self.visit(node.body)
-            if not node.body.children or not isinstance(node.body.children[-1], Return):
-                self.assembly_code.append('  pop rdi');
-                self.assembly_code.append('  mov rax, 60');
-                self.assembly_code.append('  syscall')
-            self.assembly_code.append('  ; Epilogue');
-            self.assembly_code.append('  add rsp, 64');
-            self.assembly_code.append('  pop rbp')
+            self.assembly_code.append('  mov rdi, rax');
+            self.assembly_code.append('  mov rax, 60');
+            self.assembly_code.append('  syscall')
+        else:
+            self.assembly_code.append('  ret')
 
     def visit_Block(self, node):
         old_symbol_table = self.symbol_table.copy();
@@ -78,153 +138,132 @@ class CodeGenerator(NodeVisitor):
 
     def visit_VarDecl(self, node):
         var_name = node.var_node.value
-        if var_name in self.symbol_table and self.symbol_table[var_name]['offset'] > self.stack_index:
-            raise Exception(f"Variable '{var_name}' already declared in this scope.")
-        self.symbol_table[var_name] = {'offset': self.stack_index, 'type': node.type_node}
-        self.visit(node.assign_node)
-        self.assembly_code.append(f'  ; VarDecl: {var_name}');
-        self.assembly_code.append('  pop rax');
-        self.assembly_code.append(f"  mov [rbp{self.symbol_table[var_name]['offset']}], rax")
-        self.stack_index -= 8
+        if var_name in self.symbol_table: self.error("E008", f"Variable '{var_name}' already declared.", node)
+        var_type = node.type_node;
+        size = self._get_type_size(var_type)
+        self.stack_index -= size
+        self.symbol_table[var_name] = {'type': var_type, 'offset': self.stack_index}
+        if node.assign_node:
+            self.visit(node.assign_node)
+            right_type = self._get_node_type(node.assign_node)
+            if right_type.value != 'int' and right_type.pointer_level == 0:
+                self.assembly_code.append('  pop rsi');
+                self.assembly_code.append(f'  lea rdi, [rbp{self.stack_index}]')
+                self.assembly_code.append(f'  mov rcx, {size}');
+                self.assembly_code.append('  rep movsb')
+            else:
+                self.assembly_code.append('  pop rax');
+                self.assembly_code.append(f"  mov [rbp{self.stack_index}], rax")
 
     def visit_Assign(self, node):
-        self.visit(node.right)  # Value is now on the stack
-
-        # If assigning to 'deref p', left is a UnaryOp
-        if isinstance(node.left, UnaryOp) and node.left.op.type == TokenType.KW_DEREF:
-            self.visit(node.left.expr)  # Address is now on the stack
-            self.assembly_code.append('  pop rbx ; Address')
-            self.assembly_code.append('  pop rax ; Value')
-            self.assembly_code.append('  mov [rbx], rax')
-        # If assigning to a variable 'p'
-        elif isinstance(node.left, Var):
-            var_name = node.left.value
-            if var_name not in self.symbol_table: raise Exception(f"Assigning to undeclared variable '{var_name}'")
-            stack_offset = self.symbol_table[var_name]['offset']
-            self.assembly_code.append('  pop rax ; Value')
-            self.assembly_code.append(f'  mov [rbp{stack_offset}], rax')
+        left_type = self._get_node_type(node.left)
+        right_type = self._get_node_type(node.right)
+        if left_type.value != 'int' and left_type.pointer_level == 0:
+            if repr(left_type) != repr(right_type): self.error("E009", "Type mismatch in struct assignment", node)
+            self.visit(node.right, is_lvalue=True)
+            self.visit(node.left, is_lvalue=True)
+            self.assembly_code.append('  pop rdi');
+            self.assembly_code.append('  pop rsi')
+            self.assembly_code.append(f'  mov rcx, {self.struct_table[left_type.value]["size"]}')
+            self.assembly_code.append('  rep movsb')
         else:
-            raise Exception("Invalid left-hand side in assignment")
+            self.visit(node.right)
+            if isinstance(node.left, MemberAccess):
+                self.visit(node.left, is_lvalue=True)
+                self.assembly_code.append('  pop rbx');
+                self.assembly_code.append('  pop rax')
+                self.assembly_code.append('  mov [rbx], rax')
+            elif isinstance(node.left, UnaryOp) and node.left.op.type == TokenType.KW_DEREF:
+                self.visit(node.left.expr)
+                self.assembly_code.append('  pop rbx');
+                self.assembly_code.append('  pop rax')
+                self.assembly_code.append('  mov [rbx], rax')
+            elif isinstance(node.left, Var):
+                var_name = node.left.value
+                if var_name not in self.symbol_table: self.error("E004", f"Undeclared variable '{var_name}'", node.left)
+                offset = self.symbol_table[var_name]['offset']
+                self.assembly_code.append('  pop rax');
+                self.assembly_code.append(f'  mov [rbp{offset}], rax')
+            else:
+                self.error("E010", "Invalid left-hand side in assignment", node)
+
+    def visit_MemberAccess(self, node, is_lvalue=False):
+        struct_type = self._get_node_type(node.left)
+        is_ptr = struct_type.pointer_level > 0
+        struct_name = struct_type.token.value if is_ptr else struct_type.value
+        field_name = node.right.value
+        field_info = self.struct_table[struct_name]['fields'][field_name]
+        offset = field_info['offset']
+        self.visit(node.left, is_lvalue=not is_ptr)
+        self.assembly_code.append('  pop rax')
+        self.assembly_code.append(f'  add rax, {offset}')
+        if is_lvalue:
+            self.assembly_code.append('  push rax')
+        else:
+            self.assembly_code.append('  mov rax, [rax]'); self.assembly_code.append('  push rax')
 
     def visit_UnaryOp(self, node):
         op_type = node.op.type
         if op_type == TokenType.KW_ADDR:
-            if not isinstance(node.expr, Var): raise Exception("'addr' can only be used on variables")
-            var_name = node.expr.value
-            if var_name not in self.symbol_table: raise Exception(f"Undeclared variable '{var_name}'")
-            offset = self.symbol_table[var_name]['offset']
-            self.assembly_code.append(f'  lea rax, [rbp{offset}]')
-            self.assembly_code.append('  push rax')
+            if not isinstance(node.expr, (Var, MemberAccess)): self.error("E011",
+                                                                          "'addr' can only be used on variables or struct members",
+                                                                          node)
+            self.visit(node.expr, is_lvalue=True)
             return
         if op_type == TokenType.KW_DEREF:
-            self.visit(node.expr)  # This pushes the address onto the stack
-            self.assembly_code.append('  pop rax')
-            self.assembly_code.append('  mov rax, [rax]')  # Dereference the address in rax
+            self.visit(node.expr);
+            self.assembly_code.append('  pop rax');
+            self.assembly_code.append('  mov rax, [rax]');
             self.assembly_code.append('  push rax')
             return
-
         self.visit(node.expr)
         self.assembly_code.append('  pop rax')
         if op_type == TokenType.KW_BNOT:
             self.assembly_code.append('  not rax')
         elif op_type == TokenType.KW_NOT:
-            self.assembly_code.append('  cmp rax, 0');
-            self.assembly_code.append('  sete al');
-            self.assembly_code.append('  movzx rax, al')
+            self.assembly_code.append('  cmp rax, 0'); self.assembly_code.append(
+                '  sete al'); self.assembly_code.append('  movzx rax, al')
         elif op_type == TokenType.KW_NBNOT:
             pass
         elif op_type == TokenType.KW_NNOT:
-            self.assembly_code.append('  cmp rax, 0');
-            self.assembly_code.append('  setne al');
-            self.assembly_code.append('  movzx rax, al')
+            self.assembly_code.append('  cmp rax, 0'); self.assembly_code.append(
+                '  setne al'); self.assembly_code.append('  movzx rax, al')
         self.assembly_code.append('  push rax')
 
-    # ... (The rest of the CodeGenerator class is unchanged) ...
-    def visit_IfExpr(self, node):
-        label_num = self._new_label();
-        else_label = f"L_else_{label_num}";
-        endif_label = f"L_endif_{label_num}"
-        self.visit(node.condition);
-        self.assembly_code.append('  pop rax');
-        self.assembly_code.append('  cmp rax, 0')
-        self.assembly_code.append(f'  je {else_label}');
-        self.visit(node.if_block);
-        self.assembly_code.append(f'  jmp {endif_label}')
-        self.assembly_code.append(f'{else_label}:');
-        self.visit(node.else_block);
-        self.assembly_code.append(f'{endif_label}:')
-
-    def visit_WhileStmt(self, node):
-        label_num = self._new_label();
-        start_label = f"L_while_start_{label_num}";
-        end_label = f"L_while_end_{label_num}"
-        self.loop_labels_stack.append((start_label, end_label))
-        self.assembly_code.append(f'{start_label}:')
-        self.visit(node.condition)
-        self.assembly_code.append('  pop rax');
-        self.assembly_code.append('  cmp rax, 0')
-        self.assembly_code.append(f'  je {end_label}')
-        self.visit(node.body)
-        self.assembly_code.append(f'  jmp {start_label}')
-        self.assembly_code.append(f'{end_label}:')
-        self.loop_labels_stack.pop()
-
-    def visit_LoopStmt(self, node):
-        label_num = self._new_label();
-        start_label = f"L_loop_start_{label_num}";
-        end_label = f"L_loop_end_{label_num}"
-        self.loop_labels_stack.append((start_label, end_label))
-        self.assembly_code.append(f'{start_label}:')
-        self.visit(node.body)
-        self.assembly_code.append(f'  jmp {start_label}')
-        self.assembly_code.append(f'{end_label}:')
-        self.loop_labels_stack.pop()
-
-    def visit_ForStmt(self, node):
-        old_symbol_table = self.symbol_table.copy();
-        old_stack_index = self.stack_index
-        label_num = self._new_label()
-        start_label = f"L_for_start_{label_num}";
-        continue_label = f"L_for_continue_{label_num}";
-        end_label = f"L_for_end_{label_num}"
-        if node.init: self.visit(node.init)
-        self.assembly_code.append(f'{start_label}:')
-        if node.condition:
-            self.visit(node.condition)
-            self.assembly_code.append('  pop rax');
-            self.assembly_code.append('  cmp rax, 0')
-            self.assembly_code.append(f'  je {end_label}')
-        self.loop_labels_stack.append((continue_label, end_label))
-        self.visit(node.body)
-        self.loop_labels_stack.pop()
-        self.assembly_code.append(f'{continue_label}:')
-        if node.increment: self.visit(node.increment)
-        self.assembly_code.append(f'  jmp {start_label}')
-        self.assembly_code.append(f'{end_label}:')
-        self.symbol_table = old_symbol_table;
-        self.stack_index = old_stack_index
-
-    def visit_BreakStmt(self, node):
-        if not self.loop_labels_stack: raise Exception("'break' outside of a loop")
-        _, end_label = self.loop_labels_stack[-1]
-        self.assembly_code.append(f'  jmp {end_label}')
-
-    def visit_ContinueStmt(self, node):
-        if not self.loop_labels_stack: raise Exception("'continue' outside of a loop")
-        continue_label, _ = self.loop_labels_stack[-1]
-        self.assembly_code.append(f'  jmp {continue_label}')
-
-    def visit_Num(self, node):
-        self.assembly_code.append(f'  ; Pushing number {node.value}'); self.assembly_code.append(f'  push {node.value}')
-
-    def visit_Var(self, node):
+    def visit_Var(self, node, is_lvalue=False):
         var_name = node.value
-        if var_name not in self.symbol_table:
-            if var_name == "VERSION": self.assembly_code.append(f'  push 1'); return
-            raise Exception(f"Undeclared variable '{var_name}'")
-        stack_offset = self.symbol_table[var_name]['offset'];
-        self.assembly_code.append(f'  ; Pushing variable {var_name}');
-        self.assembly_code.append(f'  push qword [rbp{stack_offset}]')
+        if var_name not in self.symbol_table: self.error("E004", f"Undeclared variable '{var_name}'", node)
+        offset = self.symbol_table[var_name]['offset']
+        var_type = self.symbol_table[var_name]['type']
+        if is_lvalue or (var_type.value != 'int' and var_type.pointer_level == 0):
+            self.assembly_code.append(f'  lea rax, [rbp{offset}]')
+        else:
+            self.assembly_code.append(f'  mov rax, [rbp{offset}]')
+        self.assembly_code.append('  push rax')
+
+    def visit_FunctionCall(self, node):
+        arg_registers = ['rdi', 'rsi', 'rdx', 'rcx', 'r8', 'r9']
+        if len(node.args) > len(arg_registers): self.error("E012", "Too many arguments in function call", node)
+        for i, arg in enumerate(node.args):
+            arg_type = self._get_node_type(arg)
+            if arg_type.value != 'int' and arg_type.pointer_level == 0:
+                self.warning("W003",
+                             f"Struct '{arg_type.value}' is passed by value. This is inefficient. Consider passing a pointer.",
+                             arg)
+            self.visit(arg)
+            self.assembly_code.append(f'  pop {arg_registers[i]}')
+        func_name = node.name_node.value
+        if func_name == 'print':
+            self.assembly_code.append('  call print_int')
+        else:
+            self.assembly_code.append(f'  call {func_name}')
+        self.assembly_code.append('  push rax')
+
+    # ... (rest of codegen is unchanged)
+    def visit_Return(self, node):
+        self.visit(node.value)
+        self.assembly_code.append('  pop rax')
+        self.assembly_code.append(f'  jmp .L_ret_{self.current_function}')
 
     def visit_BinOp(self, node):
         op_type = node.op.type
@@ -324,19 +363,81 @@ class CodeGenerator(NodeVisitor):
             self.assembly_code.append('  not rax')
         self.assembly_code.append('  push rax')
 
-    def visit_FunctionCall(self, node):
-        if node.name == 'print':
-            self.visit(node.args[0]); self.assembly_code.append('  pop rdi'); self.assembly_code.append(
-                '  call print_int')
-        else:
-            raise Exception(f"Undefined function call '{node.name}'")
+    def visit_IfExpr(self, node):
+        label_num = self._new_label();
+        else_label = f"L_else_{label_num}";
+        endif_label = f"L_endif_{label_num}"
+        self.visit(node.condition);
+        self.assembly_code.append('  pop rax');
+        self.assembly_code.append('  cmp rax, 0')
+        self.assembly_code.append(f'  je {else_label}');
+        self.visit(node.if_block);
+        self.assembly_code.append(f'  jmp {endif_label}')
+        self.assembly_code.append(f'{else_label}:');
+        self.visit(node.else_block);
+        self.assembly_code.append(f'{endif_label}:')
 
-    def visit_Return(self, node):
-        self.visit(node.value);
-        self.assembly_code.append('  ; Return statement');
-        self.assembly_code.append('  pop rdi');
-        self.assembly_code.append('  mov rax, 60');
-        self.assembly_code.append('  syscall')
+    def visit_WhileStmt(self, node):
+        label_num = self._new_label();
+        start_label = f"L_while_start_{label_num}";
+        end_label = f"L_while_end_{label_num}"
+        self.loop_labels_stack.append((start_label, end_label))
+        self.assembly_code.append(f'{start_label}:')
+        self.visit(node.condition)
+        self.assembly_code.append('  pop rax');
+        self.assembly_code.append('  cmp rax, 0')
+        self.assembly_code.append(f'  je {end_label}')
+        self.visit(node.body)
+        self.assembly_code.append(f'  jmp {start_label}')
+        self.assembly_code.append(f'{end_label}:')
+        self.loop_labels_stack.pop()
+
+    def visit_LoopStmt(self, node):
+        label_num = self._new_label();
+        start_label = f"L_loop_start_{label_num}";
+        end_label = f"L_loop_end_{label_num}"
+        self.loop_labels_stack.append((start_label, end_label))
+        self.assembly_code.append(f'{start_label}:')
+        self.visit(node.body)
+        self.assembly_code.append(f'  jmp {start_label}')
+        self.assembly_code.append(f'{end_label}:')
+        self.loop_labels_stack.pop()
+
+    def visit_ForStmt(self, node):
+        old_symbol_table = self.symbol_table.copy()
+        label_num = self._new_label()
+        start_label = f"L_for_start_{label_num}";
+        continue_label = f"L_for_continue_{label_num}";
+        end_label = f"L_for_end_{label_num}"
+        if node.init: self.visit(node.init)
+        self.assembly_code.append(f'{start_label}:')
+        if node.condition:
+            self.visit(node.condition)
+            self.assembly_code.append('  pop rax');
+            self.assembly_code.append('  cmp rax, 0')
+            self.assembly_code.append(f'  je {end_label}')
+        self.loop_labels_stack.append((continue_label, end_label))
+        self.visit(node.body)
+        self.loop_labels_stack.pop()
+        self.assembly_code.append(f'{continue_label}:')
+        if node.increment: self.visit(node.increment)
+        self.assembly_code.append(f'  jmp {start_label}')
+        self.assembly_code.append(f'{end_label}:')
+        self.symbol_table = old_symbol_table
+
+    def visit_BreakStmt(self, node):
+        if not self.loop_labels_stack: self.error("E013", "'break' outside of a loop", node)
+        _, end_label = self.loop_labels_stack[-1]
+        self.assembly_code.append(f'  jmp {end_label}')
+
+    def visit_ContinueStmt(self, node):
+        if not self.loop_labels_stack: self.error("E014", "'continue' outside of a loop", node)
+        continue_label, _ = self.loop_labels_stack[-1]
+        self.assembly_code.append(f'  jmp {continue_label}')
+
+    def visit_Num(self, node):
+        self.assembly_code.append(f'  ; Pushing number {node.value}');
+        self.assembly_code.append(f'  push {node.value}')
 
     def visit_ConstDecl(self, node):
         pass

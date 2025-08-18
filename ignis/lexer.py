@@ -1,5 +1,5 @@
 from enum import Enum
-
+from error import ErrorReporter
 
 class TokenType(Enum):
     # Single-character tokens
@@ -15,6 +15,8 @@ class TokenType(Enum):
     ASSIGN = '='
     LESS = '<'
     GREATER = '>'
+    COMMA = ','
+    DOT = '.'
 
     # Multi-character tokens
     EQUAL = '=='
@@ -39,6 +41,7 @@ class TokenType(Enum):
     KW_PTR = 'ptr'
     KW_ADDR = 'addr'
     KW_DEREF = 'deref'
+    KW_STRUCT = 'struct'
 
     # Logical and bitwise keywords
     ## Logical
@@ -87,6 +90,7 @@ RESERVED_KEYWORDS = {
     'mut': TokenType.KW_MUT,
     'const': TokenType.KW_CONST,
     'return': TokenType.KW_RETURN,
+    'struct': TokenType.KW_STRUCT,
 
     # Ifs
     'if': TokenType.KW_IF,
@@ -126,16 +130,13 @@ RESERVED_KEYWORDS = {
 
 
 class Lexer:
-    def __init__(self, text, file_path='<stdin>'):
+    def __init__(self, text, reporter):
         self.text = text
-        self.file_path = file_path # New field
+        self.reporter = reporter
         self.pos = 0
         self.current_char = self.text[self.pos] if self.pos < len(self.text) else None
         self.line = 1
         self.col = 1
-
-    def error(self, message):
-        raise Exception(f'Lexer error: {message}')
 
     def advance(self):
         if self.current_char == '\n':
@@ -143,117 +144,68 @@ class Lexer:
             self.col = 1
         else:
             self.col += 1
-
         self.pos += 1
-        if self.pos > len(self.text) - 1:
-            self.current_char = None
-        else:
-            self.current_char = self.text[self.pos]
+        self.current_char = self.text[self.pos] if self.pos < len(self.text) else None
 
     def peek(self, offset=1):
         peek_pos = self.pos + offset
-        if peek_pos > len(self.text) - 1:
-            return None
-        else:
-            return self.text[peek_pos]
+        if peek_pos >= len(self.text): return None
+        return self.text[peek_pos]
 
     def skip_whitespace(self):
-        while self.current_char is not None and self.current_char.isspace():
-            self.advance()
+        while self.current_char is not None and self.current_char.isspace(): self.advance()
 
     def skip_comment(self):
         if self.current_char == '/' and self.peek() == '/':
-            while self.current_char is not None and self.current_char != '\n':
-                self.advance()
+            while self.current_char is not None and self.current_char != '\n': self.advance()
             return
-
         if self.current_char == '/' and self.peek() == '*':
-            self.advance()
-            self.advance()
+            start_token = Token(None, '/*', self.line, self.col)
+            self.advance(); self.advance()
             nesting_level = 1
             while nesting_level > 0:
                 if self.current_char is None:
-                    self.error("Unterminated multi-line comment.")
-                elif self.current_char == '/' and self.peek() == '*':
-                    self.advance()
-                    self.advance()
-                    nesting_level += 1
-                elif self.current_char == '*' and self.peek() == '/':
-                    self.advance()
-                    self.advance()
-                    nesting_level -= 1
-                else:
-                    self.advance()
+                    self.reporter.error("E015", "Unterminated multi-line comment", start_token)
+                elif self.current_char == '/' and self.peek() == '*': self.advance(); self.advance(); nesting_level += 1
+                elif self.current_char == '*' and self.peek() == '/': self.advance(); self.advance(); nesting_level -= 1
+                else: self.advance()
             return
 
     def number(self):
         result = ''
         while self.current_char is not None and self.current_char.isdigit():
-            result += self.current_char
-            self.advance()
+            result += self.current_char; self.advance()
         return int(result)
 
     def identifier(self):
         result = ''
         while self.current_char is not None and (self.current_char.isalnum() or self.current_char == '_'):
-            result += self.current_char
-            self.advance()
-
-        token_type = RESERVED_KEYWORDS.get(result, TokenType.IDENTIFIER)
-        # Note: The line/col are from the *start* of the identifier, which is correct.
-        # We pass them back to get_next_token to create the final Token object.
-        return token_type, result
+            result += self.current_char; self.advance()
+        return RESERVED_KEYWORDS.get(result, TokenType.IDENTIFIER), result
 
     def get_next_token(self):
         while self.current_char is not None:
-            # Capture position at the beginning of the token
             line, col = self.line, self.col
-
-            if self.current_char.isspace():
-                self.skip_whitespace()
-                continue
-
-            if self.current_char == '/' and (self.peek() == '/' or self.peek() == '*'):
-                self.skip_comment()
-                continue
-
-            if self.current_char.isdigit():
-                return Token(TokenType.INTEGER, self.number(), line, col)
-
+            if self.current_char.isspace(): self.skip_whitespace(); continue
+            if self.current_char == '/' and (self.peek() == '/' or self.peek() == '*'): self.skip_comment(); continue
+            if self.current_char.isdigit(): return Token(TokenType.INTEGER, self.number(), line, col)
             if self.current_char.isalpha() or self.current_char == '_':
                 token_type, value = self.identifier()
                 return Token(token_type, value, line, col)
-
-            # Multi-character operators
             if self.current_char == '=' and self.peek() == '=' and self.peek(2) == '=':
-                self.advance();
-                self.advance();
-                self.advance()
-                return Token(TokenType.TYPE_EQUAL, '===', line, col)
+                self.advance(); self.advance(); self.advance(); return Token(TokenType.TYPE_EQUAL, '===', line, col)
             if self.current_char == '=' and self.peek() == '=':
-                self.advance();
-                self.advance()
-                return Token(TokenType.EQUAL, '==', line, col)
+                self.advance(); self.advance(); return Token(TokenType.EQUAL, '==', line, col)
             if self.current_char == '!' and self.peek() == '=':
-                self.advance();
-                self.advance()
-                return Token(TokenType.NOT_EQUAL, '!=', line, col)
+                self.advance(); self.advance(); return Token(TokenType.NOT_EQUAL, '!=', line, col)
             if self.current_char == '<' and self.peek() == '=':
-                self.advance();
-                self.advance()
-                return Token(TokenType.LESS_EQUAL, '<=', line, col)
+                self.advance(); self.advance(); return Token(TokenType.LESS_EQUAL, '<=', line, col)
             if self.current_char == '>' and self.peek() == '=':
-                self.advance();
-                self.advance()
-                return Token(TokenType.GREATER_EQUAL, '>=', line, col)
-
-            # Single-character operators
+                self.advance(); self.advance(); return Token(TokenType.GREATER_EQUAL, '>=', line, col)
             try:
                 token_type = TokenType(self.current_char)
-                token = Token(token_type, token_type.value, line, col)
-                self.advance()
+                token = Token(token_type, token_type.value, line, col); self.advance()
                 return token
             except ValueError:
-                self.error(f"Invalid character '{self.current_char}' at line {line}, col {col}")
-
+                self.reporter.error("E016", f"Invalid character '{self.current_char}'", Token(None, self.current_char, line, col))
         return Token(TokenType.EOF, None, self.line, self.col)

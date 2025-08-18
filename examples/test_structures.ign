@@ -1,0 +1,41 @@
+struct Point {
+    int x;
+    int y;
+}
+
+struct Edge {
+    Point v1;
+    Point v2;
+    int length_sqr;
+}
+
+int add(int a, int b) {
+    return a + b;
+}
+
+// Функція тепер приймає ВКАЗІВНИКИ на структури
+int sqr_cart_dist(ptr Point p1, ptr Point p2) {
+    print(p1.x);
+    print(p1.y);
+    print(p2.x);
+    print(p2.y);
+    return (p2.x - p1.x) * (p2.x - p1.x) + (p2.y - p1.y) * (p2.y - p1.y);
+}
+
+int main() {
+    mut Point p;
+    p.x = 10;
+    p.y = 32;
+
+    int result = add(p.x, p.y);
+    //print(result); // Expected: 42
+
+    mut Edge e;
+    e.v1 = p;
+    e.v2 = p;
+    // Ми передаємо АДРЕСИ структур у функцію
+    e.length_sqr = sqr_cart_dist(addr e.v1, addr e.v2);
+    print(e.length_sqr); // Expected: 0
+
+    return 0;
+}
