@@ -14,7 +14,10 @@ class ErrorReporter:
         line_num, col_num = (token.line, token.col) if token else (1, 1)
 
         header = f"{code}: {message}"
-        token_text = f"{token}"
+        if token.type is not None:
+            token_text = f"{token}"
+        else:
+            token_text = "NoneToken"
         location = f"--> {self.file_path}:{line_num}:{col_num}"
 
         snippet = ""

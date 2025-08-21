@@ -1,6 +1,7 @@
 import subprocess
 import argparse
 import sys
+import traceback
 from pathlib import Path
 
 from lexer import Lexer
@@ -28,7 +29,6 @@ def compile_source(source_code, file_path, reporter):
 
 
 def main():
-    # ... (Argument parsing is the same) ...
     arg_parser = argparse.ArgumentParser(prog="ignis", description="The Ignis language compiler.",
                                          epilog="Have fun building the future!")
     arg_parser.add_argument('input_file', type=str, help='The Ignis source file to compile')
@@ -46,7 +46,7 @@ def main():
     else:
         output_base_path = input_path.resolve().with_suffix('')
 
-    build_dir = output_base_path.parent / '.build';
+    build_dir = output_base_path.parent / '.build' / output_base_path.stem
     build_dir.mkdir(exist_ok=True)
     asm_file_path = build_dir / (output_base_path.name + '.asm')
     obj_file_path = build_dir / (output_base_path.name + '.o')
@@ -79,8 +79,17 @@ def main():
         print("\nError: 'nasm' or 'ld' not found."); sys.exit(1)
     except subprocess.CalledProcessError as e:
         print(f"\nAn error occurred during an external command: {e}"); sys.exit(1)
+    # except Exception as e:
+    #     print(f"\n{e}"); sys.exit(1)
     except Exception as e:
-        print(f"\n{e}"); sys.exit(1)
+        if "Compiler error:" in str(e):
+            print(f"\n{e}")
+        else:
+            # If it's an unexpected Python error, print the full traceback.
+            print("\n--- An unexpected internal compiler error occurred ---")
+            traceback.print_exc()
+            print("------------------------------------------------------")
+        sys.exit(1)
     finally:
         if not args.keep_files and not args.S and not args.c:
             print("--- Cleaning up intermediate files ---")

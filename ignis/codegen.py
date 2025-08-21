@@ -60,6 +60,13 @@ class CodeGenerator(NodeVisitor):
             if node.op.type == TokenType.KW_DEREF:
                 if base_type.pointer_level == 0: self.error("E005", "Cannot dereference a non-pointer type", node)
                 return Type(base_type.token, base_type.pointer_level - 1)
+        if isinstance(node, BinOp):
+            left_type = self._get_node_type(node.left)
+            right_type = self._get_node_type(node.right)
+            if left_type.pointer_level > 0 and right_type.pointer_level == 0:
+                return left_type  # ptr + int -> ptr
+            if right_type.pointer_level > 0 and left_type.pointer_level == 0:
+                return right_type  # int + ptr -> ptr
         if isinstance(node, MemberAccess):
             struct_type = self._get_node_type(node.left)
             is_ptr = struct_type.pointer_level > 0
@@ -203,34 +210,6 @@ class CodeGenerator(NodeVisitor):
         else:
             self.assembly_code.append('  mov rax, [rax]'); self.assembly_code.append('  push rax')
 
-    def visit_UnaryOp(self, node):
-        op_type = node.op.type
-        if op_type == TokenType.KW_ADDR:
-            if not isinstance(node.expr, (Var, MemberAccess)): self.error("E011",
-                                                                          "'addr' can only be used on variables or struct members",
-                                                                          node)
-            self.visit(node.expr, is_lvalue=True)
-            return
-        if op_type == TokenType.KW_DEREF:
-            self.visit(node.expr);
-            self.assembly_code.append('  pop rax');
-            self.assembly_code.append('  mov rax, [rax]');
-            self.assembly_code.append('  push rax')
-            return
-        self.visit(node.expr)
-        self.assembly_code.append('  pop rax')
-        if op_type == TokenType.KW_BNOT:
-            self.assembly_code.append('  not rax')
-        elif op_type == TokenType.KW_NOT:
-            self.assembly_code.append('  cmp rax, 0'); self.assembly_code.append(
-                '  sete al'); self.assembly_code.append('  movzx rax, al')
-        elif op_type == TokenType.KW_NBNOT:
-            pass
-        elif op_type == TokenType.KW_NNOT:
-            self.assembly_code.append('  cmp rax, 0'); self.assembly_code.append(
-                '  setne al'); self.assembly_code.append('  movzx rax, al')
-        self.assembly_code.append('  push rax')
-
     def visit_Var(self, node, is_lvalue=False):
         var_name = node.value
         if var_name not in self.symbol_table: self.error("E004", f"Undeclared variable '{var_name}'", node)
@@ -309,20 +288,31 @@ class CodeGenerator(NodeVisitor):
         self.assembly_code.append(f'  jmp .L_ret_{self.current_function}')
 
     def visit_UnaryOp(self, node):
-        self.visit(node.expr)
         op_type = node.op.type
+        if op_type == TokenType.KW_ADDR:
+            if not isinstance(node.expr, (Var, MemberAccess)):
+                self.error("E011", "'addr' can only be used on variables or struct members", node)
+            self.visit(node.expr, is_lvalue=True)
+            return
+        if op_type == TokenType.KW_DEREF:
+            self.visit(node.expr)
+            self.assembly_code.append('  pop rax')
+            self.assembly_code.append('  mov rax, [rax]')
+            self.assembly_code.append('  push rax')
+            return
+        self.visit(node.expr)
         self.assembly_code.append('  pop rax')
         if op_type == TokenType.KW_BNOT:
             self.assembly_code.append('  not rax')
         elif op_type == TokenType.KW_NOT:
-            self.assembly_code.append('  cmp rax, 0');
-            self.assembly_code.append('  sete al');
+            self.assembly_code.append('  cmp rax, 0')
+            self.assembly_code.append('  sete al')
             self.assembly_code.append('  movzx rax, al')
         elif op_type == TokenType.KW_NBNOT:
-            pass  # not(not(x)) is x
+            pass
         elif op_type == TokenType.KW_NNOT:
-            self.assembly_code.append('  cmp rax, 0');
-            self.assembly_code.append('  setne al');
+            self.assembly_code.append('  cmp rax, 0')
+            self.assembly_code.append('  setne al')
             self.assembly_code.append('  movzx rax, al')
         self.assembly_code.append('  push rax')
 
@@ -347,49 +337,61 @@ class CodeGenerator(NodeVisitor):
             self.assembly_code.append('  push rax')
             return
         if op_type in (TokenType.KW_OR, TokenType.KW_NOR):
-            label_num = self._new_label();
+            label_num = self._new_label()
             end_label = f"L_logic_end_{label_num}"
-            self.visit(node.left);
-            self.assembly_code.append('  pop rax');
+            self.visit(node.left)
+            self.assembly_code.append('  pop rax')
             self.assembly_code.append('  cmp rax, 0')
             self.assembly_code.append(f'  jne L_logic_true_{label_num}')
-            self.visit(node.right);
-            self.assembly_code.append('  pop rax');
+            self.visit(node.right)
+            self.assembly_code.append('  pop rax')
             self.assembly_code.append('  cmp rax, 0')
             self.assembly_code.append(f'  jne L_logic_true_{label_num}')
-            self.assembly_code.append(f'  mov rax, {1 if op_type == TokenType.KW_NOR else 0}');
+            self.assembly_code.append(f'  mov rax, {1 if op_type == TokenType.KW_NOR else 0}')
             self.assembly_code.append(f'  jmp {end_label}')
-            self.assembly_code.append(f'L_logic_true_{label_num}:');
+            self.assembly_code.append(f'L_logic_true_{label_num}:')
             self.assembly_code.append(f'  mov rax, {0 if op_type == TokenType.KW_NOR else 1}')
-            self.assembly_code.append(f'{end_label}:');
+            self.assembly_code.append(f'{end_label}:')
             self.assembly_code.append('  push rax')
             return
         if op_type in (TokenType.KW_XOR, TokenType.KW_XNOR):
-            self.visit(node.left);
-            self.assembly_code.append('  pop rax');
-            self.assembly_code.append('  cmp rax, 0');
+            self.visit(node.left)
+            self.assembly_code.append('  pop rax')
+            self.assembly_code.append('  cmp rax, 0')
             self.assembly_code.append('  setne cl')
-            self.visit(node.right);
-            self.assembly_code.append('  pop rax');
-            self.assembly_code.append('  cmp rax, 0');
+            self.visit(node.right)
+            self.assembly_code.append('  pop rax')
+            self.assembly_code.append('  cmp rax, 0')
             self.assembly_code.append('  setne dl')
             self.assembly_code.append('  xor cl, dl')
             if op_type == TokenType.KW_XNOR: self.assembly_code.append('  xor cl, 1')
-            self.assembly_code.append('  movzx rax, cl');
+            self.assembly_code.append('  movzx rax, cl')
             self.assembly_code.append('  push rax')
             return
         if op_type == TokenType.TYPE_EQUAL:
-            left_type = self._get_node_type(node.left);
+            left_type = self._get_node_type(node.left)
             right_type = self._get_node_type(node.right)
             result = 1 if repr(left_type) == repr(right_type) else 0
-            self.assembly_code.append(f'  ; Compile-time type check: {left_type} === {right_type}');
+            self.assembly_code.append(f'  ; Compile-time type check: {left_type} === {right_type}')
             self.assembly_code.append(f'  push {result}')
             return
-        self.visit(node.left);
+
+        left_type = self._get_node_type(node.left)
+        right_type = self._get_node_type(node.right)
+
+        self.visit(node.left)
         self.visit(node.right)
-        self.assembly_code.append('  ; Binary Operation');
-        self.assembly_code.append('  pop rbx');
+        self.assembly_code.append('  ; Binary Operation')
+        self.assembly_code.append('  pop rbx')
         self.assembly_code.append('  pop rax')
+
+        if left_type.pointer_level > 0 and right_type.pointer_level == 0:  # ptr + int
+            size = self._get_type_size(Type(left_type.token, left_type.pointer_level - 1))
+            if size > 1: self.assembly_code.append(f'  imul rbx, {size}')
+        elif right_type.pointer_level > 0 and left_type.pointer_level == 0:  # int + ptr
+            size = self._get_type_size(Type(right_type.token, right_type.pointer_level - 1))
+            if size > 1: self.assembly_code.append(f'  imul rax, {size}')
+
         if op_type == TokenType.PLUS:
             self.assembly_code.append('  add rax, rbx')
         elif op_type == TokenType.MINUS:

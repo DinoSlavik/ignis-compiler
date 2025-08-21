@@ -192,12 +192,31 @@ class Lexer:
 
     def char_literal(self):
         self.advance()  # Consume opening '
-        char = self.current_char
+        char_val = 0
+
+        if self.current_char == '\\':  # Check for an escape sequence
+            self.advance()
+            if self.current_char == 'n':
+                char_val = 10  # ASCII for newline
+            elif self.current_char == 't':
+                char_val = 9  # ASCII for tab
+            elif self.current_char == '\\':
+                char_val = 92  # ASCII for backslash
+            elif self.current_char == "'":
+                char_val = 39  # ASCII for single quote
+            else:
+                # For now, any other escaped char is just the char itself
+                char_val = ord(self.current_char)
+        else:
+            char_val = ord(self.current_char)
+
         self.advance()
         if self.current_char != "'":
-            self.reporter.error("E021", "Unterminated character literal", Token(None, "'", self.line, self.col - 1))
+            self.reporter.error("E021", "Unterminated or multi-character character literal",
+                                Token(None, "'", self.line, self.col - 1))
+
         self.advance()  # Consume closing '
-        return ord(char)  # Return ASCII value
+        return char_val
 
     def identifier(self):
         result = ''

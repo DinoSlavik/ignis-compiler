@@ -9,11 +9,6 @@ class Parser:
         self.peek_token = self.lexer.get_next_token()
 
     def _format_token_type(self, token_type):
-        if token_type.value.startswith('KW_'): return f"keyword '{token_type.name[3:].lower()}'"
-        if len(token_type.value) <= 2 and not token_type.value.isalnum(): return f"'{token_type.value}'"
-        return token_type.name
-
-    def _format_token_type(self, token_type):
         if not token_type:
             return "<unknown token>"
         # Use the name for keywords, which is more descriptive (e.g., KW_INT -> 'int')
@@ -271,7 +266,6 @@ class Parser:
     def statement(self):
         token_type = self.current_token.type
 
-        # Statements that don't need a semicolon and are not expressions
         if token_type in (TokenType.KW_WHILE, TokenType.KW_LOOP, TokenType.KW_FOR):
             if token_type == TokenType.KW_WHILE: return self.while_statement()
             if token_type == TokenType.KW_LOOP: return self.loop_statement()
@@ -292,14 +286,12 @@ class Parser:
         elif token_type == TokenType.KW_CONTINUE:
             node = self.continue_statement()
         else:
-            # If it's none of the above, it must be an expression-based statement
             node = self.expr()
             if self.current_token.type == TokenType.ASSIGN:
                 if not isinstance(node, (Var, UnaryOp, MemberAccess)):
                     self.reporter.error("E010", "Invalid assignment target.", self._get_token_from_node(node))
                 node = self.assignment_statement(left_node=node)
 
-        # All these statements must end with a semicolon
         self.eat(TokenType.SEMICOLON)
         return node
 
@@ -354,7 +346,6 @@ class Parser:
         if self.current_token.type == TokenType.KW_STRUCT:
             return self.struct_definition()
 
-        # This part assumes anything else is a function declaration
         type_node = self.type_spec();
         func_name = self.current_token.value;
         self.eat(TokenType.IDENTIFIER)
