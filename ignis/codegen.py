@@ -83,11 +83,13 @@ class CodeGenerator(NodeVisitor):
         self.visit(tree)
         full_asm = []
         if self.data_section: full_asm.append('section .data'); full_asm.extend(self.data_section)
-        full_asm.append('section .bss');
+        full_asm.append('section .bss')
         full_asm.append('  print_buf resb 32\n')
-        full_asm.append('section .text');
+        full_asm.append('section .text')
         full_asm.append('global _start')
         self._add_print_function()
+        self._add_putchar_function()
+        self._add_getchar_function()
         full_asm.extend(self.assembly_code)
         return '\n'.join(full_asm)
 
@@ -98,13 +100,13 @@ class CodeGenerator(NodeVisitor):
             if not isinstance(decl, StructDef): self.visit(decl)
 
     def visit_StructDef(self, node):
-        offset = 0;
+        offset = 0
         fields = {}
         for field in node.fields:
-            field_name = field.var_node.value;
+            field_name = field.var_node.value
             field_type = field.type_node
             size = self._get_type_size(field_type)
-            fields[field_name] = {'type': field_type, 'offset': offset};
+            fields[field_name] = {'type': field_type, 'offset': offset}
             offset += size
         self.struct_table[node.name] = {'fields': fields, 'size': offset}
 
@@ -112,15 +114,15 @@ class CodeGenerator(NodeVisitor):
         self.current_function = node.func_name
         func_label = '_start' if node.func_name == 'main' else node.func_name
         self.assembly_code.append(f'{func_label}:')
-        self.assembly_code.append('  push rbp');
+        self.assembly_code.append('  push rbp')
         self.assembly_code.append('  mov rbp, rsp')
-        local_vars_space = 256;
+        local_vars_space = 256
         self.assembly_code.append(f'  sub rsp, {local_vars_space}')
-        self.symbol_table = {};
+        self.symbol_table = {}
         self.stack_index = 0
         arg_registers = ['rdi', 'rsi', 'rdx', 'rcx', 'r8', 'r9']
         for i, param in enumerate(node.params):
-            param_name = param.var_node.value;
+            param_name = param.var_node.value
             self.stack_index -= 8
             self.symbol_table[param_name] = {'type': param.type_node, 'offset': self.stack_index}
             self.assembly_code.append(f'  mov [rbp{self.stack_index}], {arg_registers[i]}')
@@ -128,26 +130,26 @@ class CodeGenerator(NodeVisitor):
         if not node.body.children or not isinstance(node.body.children[-1], Return):
             self.assembly_code.append('  pop rax')
         self.assembly_code.append(f'.L_ret_{node.func_name}:')
-        self.assembly_code.append('  mov rsp, rbp');
+        self.assembly_code.append('  mov rsp, rbp')
         self.assembly_code.append('  pop rbp')
         if node.func_name == 'main':
-            self.assembly_code.append('  mov rdi, rax');
-            self.assembly_code.append('  mov rax, 60');
+            self.assembly_code.append('  mov rdi, rax')
+            self.assembly_code.append('  mov rax, 60')
             self.assembly_code.append('  syscall')
         else:
             self.assembly_code.append('  ret')
 
     def visit_Block(self, node):
-        old_symbol_table = self.symbol_table.copy();
+        old_symbol_table = self.symbol_table.copy()
         old_stack_index = self.stack_index
         for child in node.children: self.visit(child)
-        self.symbol_table = old_symbol_table;
+        self.symbol_table = old_symbol_table
         self.stack_index = old_stack_index
 
     def visit_VarDecl(self, node):
         var_name = node.var_node.value
         if var_name in self.symbol_table: self.error("E008", f"Variable '{var_name}' already declared.", node)
-        var_type = node.type_node;
+        var_type = node.type_node
         size = self._get_type_size(var_type)
         self.stack_index -= size
         self.symbol_table[var_name] = {'type': var_type, 'offset': self.stack_index}
@@ -155,12 +157,12 @@ class CodeGenerator(NodeVisitor):
             self.visit(node.assign_node)
             right_type = self._get_node_type(node.assign_node)
             if right_type.value != 'int' and right_type.pointer_level == 0:
-                self.assembly_code.append('  pop rsi');
+                self.assembly_code.append('  pop rsi')
                 self.assembly_code.append(f'  lea rdi, [rbp{self.stack_index}]')
-                self.assembly_code.append(f'  mov rcx, {size}');
+                self.assembly_code.append(f'  mov rcx, {size}')
                 self.assembly_code.append('  rep movsb')
             else:
-                self.assembly_code.append('  pop rax');
+                self.assembly_code.append('  pop rax')
                 self.assembly_code.append(f"  mov [rbp{self.stack_index}], rax")
 
     def visit_Assign(self, node):
@@ -170,7 +172,7 @@ class CodeGenerator(NodeVisitor):
             if repr(left_type) != repr(right_type): self.error("E009", "Type mismatch in struct assignment", node)
             self.visit(node.right, is_lvalue=True)
             self.visit(node.left, is_lvalue=True)
-            self.assembly_code.append('  pop rdi');
+            self.assembly_code.append('  pop rdi')
             self.assembly_code.append('  pop rsi')
             self.assembly_code.append(f'  mov rcx, {self.struct_table[left_type.value]["size"]}')
             self.assembly_code.append('  rep movsb')
@@ -178,19 +180,19 @@ class CodeGenerator(NodeVisitor):
             self.visit(node.right)
             if isinstance(node.left, MemberAccess):
                 self.visit(node.left, is_lvalue=True)
-                self.assembly_code.append('  pop rbx');
+                self.assembly_code.append('  pop rbx')
                 self.assembly_code.append('  pop rax')
                 self.assembly_code.append('  mov [rbx], rax')
             elif isinstance(node.left, UnaryOp) and node.left.op.type == TokenType.KW_DEREF:
                 self.visit(node.left.expr)
-                self.assembly_code.append('  pop rbx');
+                self.assembly_code.append('  pop rbx')
                 self.assembly_code.append('  pop rax')
                 self.assembly_code.append('  mov [rbx], rax')
             elif isinstance(node.left, Var):
                 var_name = node.left.value
                 if var_name not in self.symbol_table: self.error("E004", f"Undeclared variable '{var_name}'", node.left)
                 offset = self.symbol_table[var_name]['offset']
-                self.assembly_code.append('  pop rax');
+                self.assembly_code.append('  pop rax')
                 self.assembly_code.append(f'  mov [rbp{offset}], rax')
             else:
                 self.error("E010", "Invalid left-hand side in assignment", node)
@@ -319,21 +321,21 @@ class CodeGenerator(NodeVisitor):
     def visit_BinOp(self, node):
         op_type = node.op.type
         if op_type in (TokenType.KW_AND, TokenType.KW_NAND):
-            label_num = self._new_label();
+            label_num = self._new_label()
             end_label = f"L_logic_end_{label_num}"
-            self.visit(node.left);
-            self.assembly_code.append('  pop rax');
+            self.visit(node.left)
+            self.assembly_code.append('  pop rax')
             self.assembly_code.append('  cmp rax, 0')
             self.assembly_code.append(f'  je L_logic_false_{label_num}')
-            self.visit(node.right);
-            self.assembly_code.append('  pop rax');
+            self.visit(node.right)
+            self.assembly_code.append('  pop rax')
             self.assembly_code.append('  cmp rax, 0')
             self.assembly_code.append(f'  je L_logic_false_{label_num}')
-            self.assembly_code.append(f'  mov rax, {0 if op_type == TokenType.KW_NAND else 1}');
+            self.assembly_code.append(f'  mov rax, {0 if op_type == TokenType.KW_NAND else 1}')
             self.assembly_code.append(f'  jmp {end_label}')
-            self.assembly_code.append(f'L_logic_false_{label_num}:');
+            self.assembly_code.append(f'L_logic_false_{label_num}:')
             self.assembly_code.append(f'  mov rax, {1 if op_type == TokenType.KW_NAND else 0}')
-            self.assembly_code.append(f'{end_label}:');
+            self.assembly_code.append(f'{end_label}:')
             self.assembly_code.append('  push rax')
             return
         if op_type in (TokenType.KW_OR, TokenType.KW_NOR):
@@ -427,27 +429,27 @@ class CodeGenerator(NodeVisitor):
         self.assembly_code.append('  push rax')
 
     def visit_IfExpr(self, node):
-        label_num = self._new_label();
-        else_label = f"L_else_{label_num}";
+        label_num = self._new_label()
+        else_label = f"L_else_{label_num}"
         endif_label = f"L_endif_{label_num}"
-        self.visit(node.condition);
-        self.assembly_code.append('  pop rax');
+        self.visit(node.condition)
+        self.assembly_code.append('  pop rax')
         self.assembly_code.append('  cmp rax, 0')
-        self.assembly_code.append(f'  je {else_label}');
-        self.visit(node.if_block);
+        self.assembly_code.append(f'  je {else_label}')
+        self.visit(node.if_block)
         self.assembly_code.append(f'  jmp {endif_label}')
-        self.assembly_code.append(f'{else_label}:');
-        self.visit(node.else_block);
+        self.assembly_code.append(f'{else_label}:')
+        self.visit(node.else_block)
         self.assembly_code.append(f'{endif_label}:')
 
     def visit_WhileStmt(self, node):
-        label_num = self._new_label();
-        start_label = f"L_while_start_{label_num}";
+        label_num = self._new_label()
+        start_label = f"L_while_start_{label_num}"
         end_label = f"L_while_end_{label_num}"
         self.loop_labels_stack.append((start_label, end_label))
         self.assembly_code.append(f'{start_label}:')
         self.visit(node.condition)
-        self.assembly_code.append('  pop rax');
+        self.assembly_code.append('  pop rax')
         self.assembly_code.append('  cmp rax, 0')
         self.assembly_code.append(f'  je {end_label}')
         self.visit(node.body)
@@ -456,8 +458,8 @@ class CodeGenerator(NodeVisitor):
         self.loop_labels_stack.pop()
 
     def visit_LoopStmt(self, node):
-        label_num = self._new_label();
-        start_label = f"L_loop_start_{label_num}";
+        label_num = self._new_label()
+        start_label = f"L_loop_start_{label_num}"
         end_label = f"L_loop_end_{label_num}"
         self.loop_labels_stack.append((start_label, end_label))
         self.assembly_code.append(f'{start_label}:')
@@ -469,14 +471,14 @@ class CodeGenerator(NodeVisitor):
     def visit_ForStmt(self, node):
         old_symbol_table = self.symbol_table.copy()
         label_num = self._new_label()
-        start_label = f"L_for_start_{label_num}";
-        continue_label = f"L_for_continue_{label_num}";
+        start_label = f"L_for_start_{label_num}"
+        continue_label = f"L_for_continue_{label_num}"
         end_label = f"L_for_end_{label_num}"
         if node.init: self.visit(node.init)
         self.assembly_code.append(f'{start_label}:')
         if node.condition:
             self.visit(node.condition)
-            self.assembly_code.append('  pop rax');
+            self.assembly_code.append('  pop rax')
             self.assembly_code.append('  cmp rax, 0')
             self.assembly_code.append(f'  je {end_label}')
         self.loop_labels_stack.append((continue_label, end_label))
@@ -499,7 +501,7 @@ class CodeGenerator(NodeVisitor):
         self.assembly_code.append(f'  jmp {continue_label}')
 
     def visit_Num(self, node):
-        self.assembly_code.append(f'  ; Pushing number {node.value}');
+        self.assembly_code.append(f'  ; Pushing number {node.value}')
         self.assembly_code.append(f'  push {node.value}')
 
     def visit_ConstDecl(self, node):

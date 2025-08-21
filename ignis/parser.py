@@ -64,8 +64,8 @@ class Parser:
         else:
             self.reporter.error("E018", "Invalid factor in expression", token)
         while self.current_token.type == TokenType.DOT:
-            self.eat(TokenType.DOT);
-            field_node = Var(self.current_token);
+            self.eat(TokenType.DOT)
+            field_node = Var(self.current_token)
             self.eat(TokenType.IDENTIFIER)
             node = MemberAccess(left=node, right=field_node)
         return node
@@ -106,8 +106,8 @@ class Parser:
         COMPARISON_OPS = (TokenType.EQUAL, TokenType.NOT_EQUAL, TokenType.LESS, TokenType.LESS_EQUAL, TokenType.GREATER,
                           TokenType.GREATER_EQUAL, TokenType.TYPE_EQUAL)
         if self.current_token.type in COMPARISON_OPS:
-            op = self.current_token;
-            self.eat(op.type);
+            op = self.current_token
+            self.eat(op.type)
             right = self.additive_expr()
             node = BinOp(left=node, op=op, right=right)
         return node
@@ -116,7 +116,7 @@ class Parser:
         node = self.comparison_expr()
         BITWISE_AND_OPS = (TokenType.KW_BAND, TokenType.KW_NBAND)
         while self.current_token.type in BITWISE_AND_OPS:
-            op = self.current_token;
+            op = self.current_token
             self.eat(op.type)
             node = BinOp(left=node, op=op, right=self.comparison_expr())
         return node
@@ -125,7 +125,7 @@ class Parser:
         node = self.bitwise_and_expr()
         BITWISE_XOR_OPS = (TokenType.KW_BXOR, TokenType.KW_NBXOR)
         while self.current_token.type in BITWISE_XOR_OPS:
-            op = self.current_token;
+            op = self.current_token
             self.eat(op.type)
             node = BinOp(left=node, op=op, right=self.bitwise_and_expr())
         return node
@@ -134,7 +134,7 @@ class Parser:
         node = self.bitwise_xor_expr()
         BITWISE_OR_OPS = (TokenType.KW_BOR, TokenType.KW_NBOR)
         while self.current_token.type in BITWISE_OR_OPS:
-            op = self.current_token;
+            op = self.current_token
             self.eat(op.type)
             node = BinOp(left=node, op=op, right=self.bitwise_xor_expr())
         return node
@@ -143,7 +143,7 @@ class Parser:
         node = self.bitwise_or_expr()
         LOGICAL_AND_OPS = (TokenType.KW_AND, TokenType.KW_NAND)
         while self.current_token.type in LOGICAL_AND_OPS:
-            op = self.current_token;
+            op = self.current_token
             self.eat(op.type)
             node = BinOp(left=node, op=op, right=self.bitwise_or_expr())
         return node
@@ -152,7 +152,7 @@ class Parser:
         node = self.logical_and_expr()
         LOGICAL_OR_OPS = (TokenType.KW_OR, TokenType.KW_NOR, TokenType.KW_XOR, TokenType.KW_XNOR)
         while self.current_token.type in LOGICAL_OR_OPS:
-            op = self.current_token;
+            op = self.current_token
             self.eat(op.type)
             node = BinOp(left=node, op=op, right=self.logical_and_expr())
         return node
@@ -160,13 +160,13 @@ class Parser:
     def expr(self):
         node = self.logical_or_expr()
         if self.current_token.type == TokenType.KW_IF:
-            self.eat(TokenType.KW_IF);
-            condition = self.expr();
+            self.eat(TokenType.KW_IF)
+            condition = self.expr()
             self.eat(TokenType.KW_ELSE)
-            else_expr = self.expr();
-            if_block = Block();
+            else_expr = self.expr()
+            if_block = Block()
             if_block.children.append(node)
-            else_block = Block();
+            else_block = Block()
             else_block.children.append(else_expr)
             return IfExpr(condition=condition, if_block=if_block, else_block=else_block)
         return node
@@ -176,10 +176,10 @@ class Parser:
             self.eat(TokenType.KW_IF)
         elif self.current_token.type == TokenType.KW_ELIF:
             self.eat(TokenType.KW_ELIF)
-        self.eat(TokenType.LPAREN);
-        condition = self.expr();
+        self.eat(TokenType.LPAREN)
+        condition = self.expr()
         self.eat(TokenType.RPAREN)
-        if_block = self.block();
+        if_block = self.block()
         else_block = None
         if self.current_token.type == TokenType.KW_ELIF:
             else_block = self.if_expression()
@@ -191,8 +191,8 @@ class Parser:
 
     def while_statement(self):
         self.eat(TokenType.KW_WHILE)
-        self.eat(TokenType.LPAREN);
-        condition = self.expr();
+        self.eat(TokenType.LPAREN)
+        condition = self.expr()
         self.eat(TokenType.RPAREN)
         body = self.block()
         return WhileStmt(condition, body)
@@ -203,7 +203,7 @@ class Parser:
         return LoopStmt(body)
 
     def for_statement(self):
-        self.eat(TokenType.KW_FOR);
+        self.eat(TokenType.KW_FOR)
         self.eat(TokenType.LPAREN)
         init_node = None
         if self.current_token.type != TokenType.SEMICOLON:
@@ -234,32 +234,32 @@ class Parser:
     def variable_declaration(self):
         is_mutable = False
         if self.current_token.type == TokenType.KW_MUT: is_mutable = True; self.eat(TokenType.KW_MUT)
-        type_node = self.type_spec();
-        var_token = self.current_token;
+        type_node = self.type_spec()
+        var_token = self.current_token
         self.eat(TokenType.IDENTIFIER)
-        var_node = Var(var_token);
+        var_node = Var(var_token)
         assign_node = None
         if self.current_token.type == TokenType.ASSIGN:
-            self.eat(TokenType.ASSIGN);
+            self.eat(TokenType.ASSIGN)
             assign_node = self.expr()
         return VarDecl(type_node, var_node, assign_node, is_mutable)
 
     def constant_declaration(self):
-        self.eat(TokenType.KW_CONST);
-        type_node = self.type_spec();
+        self.eat(TokenType.KW_CONST)
+        type_node = self.type_spec()
         var_token = self.current_token
-        self.eat(TokenType.IDENTIFIER);
-        var_node = Var(var_token);
+        self.eat(TokenType.IDENTIFIER)
+        var_node = Var(var_token)
         self.eat(TokenType.ASSIGN)
-        assign_node = self.expr();
+        assign_node = self.expr()
         return ConstDecl(type_node, var_node, assign_node)
 
     def return_statement(self):
         self.eat(TokenType.KW_RETURN); value = self.expr(); return Return(value)
 
     def assignment_statement(self, left_node):
-        op = self.current_token;
-        self.eat(TokenType.ASSIGN);
+        op = self.current_token
+        self.eat(TokenType.ASSIGN)
         right = self.expr()
         return Assign(left_node, op, right)
 
@@ -296,7 +296,7 @@ class Parser:
         return node
 
     def block(self):
-        self.eat(TokenType.LBRACE);
+        self.eat(TokenType.LBRACE)
         nodes = []
         while self.current_token.type != TokenType.RBRACE:
             if self.peek_token.type == TokenType.RBRACE:
@@ -304,34 +304,34 @@ class Parser:
             else:
                 nodes.append(self.statement())
         self.eat(TokenType.RBRACE)
-        root = Block();
+        root = Block()
         for node in nodes: root.children.append(node)
         return root
 
     def parameter_list(self):
         params = []
         if self.current_token.type == TokenType.RPAREN: return params
-        type_node = self.type_spec();
-        var_node = Var(self.current_token);
+        type_node = self.type_spec()
+        var_node = Var(self.current_token)
         self.eat(TokenType.IDENTIFIER)
         params.append(Param(type_node, var_node))
         while self.current_token.type == TokenType.COMMA:
             self.eat(TokenType.COMMA)
-            type_node = self.type_spec();
-            var_node = Var(self.current_token);
+            type_node = self.type_spec()
+            var_node = Var(self.current_token)
             self.eat(TokenType.IDENTIFIER)
             params.append(Param(type_node, var_node))
         return params
 
     def struct_definition(self):
-        self.eat(TokenType.KW_STRUCT);
-        name_token = self.current_token;
+        self.eat(TokenType.KW_STRUCT)
+        name_token = self.current_token
         self.eat(TokenType.IDENTIFIER)
-        self.eat(TokenType.LBRACE);
+        self.eat(TokenType.LBRACE)
         fields = []
         while self.current_token.type != TokenType.RBRACE:
-            type_node = self.type_spec();
-            var_node = Var(self.current_token);
+            type_node = self.type_spec()
+            var_node = Var(self.current_token)
             self.eat(TokenType.IDENTIFIER)
             self.eat(TokenType.SEMICOLON)
             fields.append(Field(type_node, var_node))
@@ -340,33 +340,33 @@ class Parser:
 
     def declaration(self):
         if self.current_token.type == TokenType.KW_CONST:
-            node = self.constant_declaration();
-            self.eat(TokenType.SEMICOLON);
+            node = self.constant_declaration()
+            self.eat(TokenType.SEMICOLON)
             return node
         if self.current_token.type == TokenType.KW_STRUCT:
             return self.struct_definition()
 
-        type_node = self.type_spec();
-        func_name = self.current_token.value;
+        type_node = self.type_spec()
+        func_name = self.current_token.value
         self.eat(TokenType.IDENTIFIER)
-        self.eat(TokenType.LPAREN);
-        params = self.parameter_list();
+        self.eat(TokenType.LPAREN)
+        params = self.parameter_list()
         self.eat(TokenType.RPAREN)
         body = self.block()
         return FunctionDecl(type_node, func_name, params, body)
 
     def parse(self):
-        declarations = [];
+        declarations = []
         while self.current_token.type != TokenType.EOF: declarations.append(self.declaration())
         if not declarations: self.reporter.error("E020", "Source file contains no code (or no 'main' function).",
                                                  self.current_token)
         return Program(declarations)
 
     def function_call(self):
-        name_node = Var(self.current_token);
-        self.eat(TokenType.IDENTIFIER);
+        name_node = Var(self.current_token)
+        self.eat(TokenType.IDENTIFIER)
         self.eat(TokenType.LPAREN)
-        args = [];
+        args = []
         if self.current_token.type != TokenType.RPAREN:
             args.append(self.expr())
             while self.current_token.type == TokenType.COMMA:

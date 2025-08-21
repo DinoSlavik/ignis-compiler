@@ -47,7 +47,7 @@ def main():
         output_base_path = input_path.resolve().with_suffix('')
 
     build_dir = output_base_path.parent / '.build' / output_base_path.stem
-    build_dir.mkdir(exist_ok=True)
+    build_dir.mkdir(exist_ok=True, parents=True)
     asm_file_path = build_dir / (output_base_path.name + '.asm')
     obj_file_path = build_dir / (output_base_path.name + '.o')
     executable_path = output_base_path
@@ -79,8 +79,6 @@ def main():
         print("\nError: 'nasm' or 'ld' not found."); sys.exit(1)
     except subprocess.CalledProcessError as e:
         print(f"\nAn error occurred during an external command: {e}"); sys.exit(1)
-    # except Exception as e:
-    #     print(f"\n{e}"); sys.exit(1)
     except Exception as e:
         if "Compiler error:" in str(e):
             print(f"\n{e}")
