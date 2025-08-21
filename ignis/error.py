@@ -14,6 +14,7 @@ class ErrorReporter:
         line_num, col_num = (token.line, token.col) if token else (1, 1)
 
         header = f"{code}: {message}"
+        token_text = f"{token}"
         location = f"--> {self.file_path}:{line_num}:{col_num}"
 
         snippet = ""
@@ -28,7 +29,7 @@ class ErrorReporter:
                 pointer_padding = ' ' * (len(line_number_str) + col_num - 1)
                 snippet += f"{pointer_padding}^\n"
 
-        full_message = f"{level} {header}\n{location}\n\n{snippet}"
+        full_message = f"{level} {header}\n{token_text}\n{location}\n\n{snippet}"
 
         if level == "Error":
             raise Exception(f'Compiler error:\n{full_message}')

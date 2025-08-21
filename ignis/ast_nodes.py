@@ -58,6 +58,12 @@ class Var(AST):
 class Num(AST):
     def __init__(self, token): self.token, self.value = token, token.value
     def __repr__(self): return f"Num(value={self.value})"
+class CharLiteral(AST):
+    def __init__(self, token): self.token, self.value = token, token.value
+    def __repr__(self): return f"Char(value={self.value})"
+class StringLiteral(AST):
+    def __init__(self, token): self.token, self.value = token, token.value
+    def __repr__(self): return f"String(value='{self.value}')"
 class BinOp(AST):
     def __init__(self, left, op, right): self.left, self.op, self.right = left, op, right
     def __repr__(self): return f"BinOp(left={self.left}, op='{self.op.value}', right={self.right})"

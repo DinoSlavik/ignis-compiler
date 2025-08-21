@@ -21,6 +21,7 @@ class CodeGenerator(NodeVisitor):
         self.stack_index = 0
         self.label_counter = 0
         self.loop_labels_stack = []
+        self.string_literal_counter = 0
 
     def error(self, code, message, node):
         self.reporter.error(code, message, self._get_token_from_node(node))
@@ -42,7 +43,7 @@ class CodeGenerator(NodeVisitor):
 
     def _get_type_size(self, type_node):
         if type_node.pointer_level > 0: return 8
-        if type_node.value == 'int': return 8
+        if type_node.value in ('int', 'char'): return 8
         if type_node.value in self.struct_table:
             return self.struct_table[type_node.value]['size']
         self.error("E006", f"Unknown type '{type_node.value}'", type_node.token)
@@ -259,11 +260,71 @@ class CodeGenerator(NodeVisitor):
             self.assembly_code.append(f'  call {func_name}')
         self.assembly_code.append('  push rax')
 
-    # ... (rest of codegen is unchanged)
+    def visit_CharLiteral(self, node):
+        self.assembly_code.append(f'  push {node.value}')
+
+    def visit_StringLiteral(self, node):
+        label = f'L_str_{self.string_literal_counter}'
+        self.string_literal_counter += 1
+        # Add string to .data section. db is 'define byte'. 0 is the null terminator.
+        self.data_section.append(f'  {label} db "{node.value}", 0')
+        # Push the address of the string onto the stack
+        self.assembly_code.append(f'  push {label}')
+
+    def _add_putchar_function(self):
+        self.assembly_code.extend([
+            'putchar:',
+            '  push rbp',
+            '  mov rbp, rsp',
+            '  mov [rbp-8], rdi ; Save argument (the character)',
+            '  mov rax, 1 ; syscall write',
+            '  mov rdi, 1 ; stdout',
+            '  lea rsi, [rbp-8] ; address of the character on the stack',
+            '  mov rdx, 1 ; length is 1 byte',
+            '  syscall',
+            '  pop rbp',
+            '  ret', ''
+        ])
+
+    def _add_getchar_function(self):
+        self.assembly_code.extend([
+            'getchar:',
+            '  push rbp',
+            '  mov rbp, rsp',
+            '  sub rsp, 8 ; Make space for one character',
+            '  mov rax, 0 ; syscall read',
+            '  mov rdi, 0 ; stdin',
+            '  lea rsi, [rbp-8] ; buffer to read into',
+            '  mov rdx, 1 ; read 1 byte',
+            '  syscall',
+            '  movzx rax, byte [rbp-8] ; Move the character into RAX, zero-extending',
+            '  mov rsp, rbp',
+            '  pop rbp',
+            '  ret', ''
+        ])
+
     def visit_Return(self, node):
         self.visit(node.value)
         self.assembly_code.append('  pop rax')
         self.assembly_code.append(f'  jmp .L_ret_{self.current_function}')
+
+    def visit_UnaryOp(self, node):
+        self.visit(node.expr)
+        op_type = node.op.type
+        self.assembly_code.append('  pop rax')
+        if op_type == TokenType.KW_BNOT:
+            self.assembly_code.append('  not rax')
+        elif op_type == TokenType.KW_NOT:
+            self.assembly_code.append('  cmp rax, 0');
+            self.assembly_code.append('  sete al');
+            self.assembly_code.append('  movzx rax, al')
+        elif op_type == TokenType.KW_NBNOT:
+            pass  # not(not(x)) is x
+        elif op_type == TokenType.KW_NNOT:
+            self.assembly_code.append('  cmp rax, 0');
+            self.assembly_code.append('  setne al');
+            self.assembly_code.append('  movzx rax, al')
+        self.assembly_code.append('  push rax')
 
     def visit_BinOp(self, node):
         op_type = node.op.type

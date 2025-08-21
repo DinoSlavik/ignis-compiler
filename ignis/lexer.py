@@ -27,6 +27,7 @@ class TokenType(Enum):
 
     # Keywords
     KW_INT = 'int'
+    KW_CHAR = 'char'
     KW_MUT = 'mut'
     KW_CONST = 'const'
     KW_RETURN = 'return'
@@ -68,6 +69,8 @@ class TokenType(Enum):
     # Literals and identifiers
     IDENTIFIER = 'IDENTIFIER'
     INTEGER = 'INTEGER'
+    CHAR = 'CHAR'
+    STRING = 'STRING'
     EOF = 'EOF'
 
 
@@ -87,6 +90,7 @@ class Token:
 
 RESERVED_KEYWORDS = {
     'int': TokenType.KW_INT,
+    'char': TokenType.KW_CHAR,
     'mut': TokenType.KW_MUT,
     'const': TokenType.KW_CONST,
     'return': TokenType.KW_RETURN,
@@ -177,6 +181,24 @@ class Lexer:
             result += self.current_char; self.advance()
         return int(result)
 
+    def string_literal(self):
+        self.advance()  # Consume opening "
+        result = ""
+        while self.current_char is not None and self.current_char != '"':
+            result += self.current_char
+            self.advance()
+        self.advance()  # Consume closing "
+        return result
+
+    def char_literal(self):
+        self.advance()  # Consume opening '
+        char = self.current_char
+        self.advance()
+        if self.current_char != "'":
+            self.reporter.error("E021", "Unterminated character literal", Token(None, "'", self.line, self.col - 1))
+        self.advance()  # Consume closing '
+        return ord(char)  # Return ASCII value
+
     def identifier(self):
         result = ''
         while self.current_char is not None and (self.current_char.isalnum() or self.current_char == '_'):
@@ -186,12 +208,25 @@ class Lexer:
     def get_next_token(self):
         while self.current_char is not None:
             line, col = self.line, self.col
-            if self.current_char.isspace(): self.skip_whitespace(); continue
-            if self.current_char == '/' and (self.peek() == '/' or self.peek() == '*'): self.skip_comment(); continue
-            if self.current_char.isdigit(): return Token(TokenType.INTEGER, self.number(), line, col)
+
+            # Space
+            if self.current_char.isspace():
+                self.skip_whitespace(); continue
+            # Comment
+            if self.current_char == '/' and (self.peek() == '/' or self.peek() == '*'):
+                self.skip_comment(); continue
+            # Types
+            if self.current_char.isdigit():
+                return Token(TokenType.INTEGER, self.number(), line, col)
+            if self.current_char == "\"":
+                return Token(TokenType.STRING, self.string_literal(), line, col)
+            if self.current_char == "\'":
+                return Token(TokenType.CHAR, self.char_literal(), line, col)
+            # Identifier
             if self.current_char.isalpha() or self.current_char == '_':
                 token_type, value = self.identifier()
                 return Token(token_type, value, line, col)
+            # Operators
             if self.current_char == '=' and self.peek() == '=' and self.peek(2) == '=':
                 self.advance(); self.advance(); self.advance(); return Token(TokenType.TYPE_EQUAL, '===', line, col)
             if self.current_char == '=' and self.peek() == '=':

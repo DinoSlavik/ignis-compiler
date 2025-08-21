@@ -1,0 +1,30 @@
+int print_string(ptr char s) {
+    mut int i = 0;
+    loop {
+        char current_char = deref (s + i);
+        if (current_char == 0) {
+            break;
+        }
+        else {};
+        putchar(current_char);
+        i = i + 1;
+    }
+    return 0;
+}
+
+int main() {
+    // Test string literal and print_string function
+    ptr char prompt = "Enter a character: ";
+    print_string(prompt);
+
+    // Test getchar()
+    char input_char = getchar();
+
+    // Test putchar()
+    ptr char response = "\nYou entered: ";
+    print_string(response);
+    putchar(input_char);
+    putchar('\n');
+
+    return 0;
+}
