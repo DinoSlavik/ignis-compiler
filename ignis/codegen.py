@@ -8,7 +8,9 @@ class NodeVisitor:
         visitor = getattr(self, method_name, self.generic_visit)
         return visitor(node, *args, **kwargs)
 
-    def generic_visit(self, node, *args, **kwargs): self.error("E003", f"Unsupported AST node '{type(node).__name__}'", node)
+    def generic_visit(self, node, *args, **kwargs): self.error("E003", f"Unsupported AST node '{type(node).__name__}'",
+                                                               node)
+
 
 class CodeGenerator(NodeVisitor):
     def __init__(self, reporter):
@@ -51,6 +53,7 @@ class CodeGenerator(NodeVisitor):
 
     def _get_node_type(self, node):
         if isinstance(node, Num): return Type(Token(TokenType.KW_INT, 'int'))
+        if isinstance(node, CharLiteral): return Type(Token(TokenType.KW_CHAR, 'char'))
         if isinstance(node, Var):
             var_name = node.value
             if var_name in self.symbol_table: return self.symbol_table[var_name]['type']
@@ -156,7 +159,6 @@ class CodeGenerator(NodeVisitor):
         var_type = node.type_node
         type_size = self._get_type_size(var_type)
 
-        # --- FIX: Always allocate 8 bytes for local variables to ensure stack alignment ---
         alloc_size = 8
         self.stack_index -= alloc_size
         self.symbol_table[var_name] = {'type': var_type, 'offset': self.stack_index}
@@ -167,11 +169,10 @@ class CodeGenerator(NodeVisitor):
             if right_type.value not in ('int', 'char') and right_type.pointer_level == 0:
                 self.assembly_code.append('  pop rsi');
                 self.assembly_code.append(f'  lea rdi, [rbp{self.stack_index}]')
-                self.assembly_code.append(f'  mov rcx, {type_size}'); # Use actual type_size for movsb
+                self.assembly_code.append(f'  mov rcx, {type_size}');
                 self.assembly_code.append('  rep movsb')
             else:
                 self.assembly_code.append('  pop rax');
-                # Use the actual type size to determine the register (al vs rax)
                 if type_size == 1:
                     self.assembly_code.append(f"  mov [rbp{self.stack_index}], al")
                 else:
@@ -203,9 +204,9 @@ class CodeGenerator(NodeVisitor):
                 self.assembly_code.append('  pop rbx')
                 self.assembly_code.append('  pop rax')
                 if self._get_type_size(left_type) == 1:
-                     self.assembly_code.append('  mov [rbx], al')
+                    self.assembly_code.append('  mov [rbx], al')
                 else:
-                     self.assembly_code.append('  mov [rbx], rax')
+                    self.assembly_code.append('  mov [rbx], rax')
             elif isinstance(node.left, Var):
                 var_name = node.left.value
                 if var_name not in self.symbol_table: self.error("E004", f"Undeclared variable '{var_name}'", node.left)
@@ -247,26 +248,26 @@ class CodeGenerator(NodeVisitor):
         if is_lvalue or is_struct_like:
             self.assembly_code.append(f'  lea rax, [rbp{offset}]')
         else:
-            self.assembly_code.append(f'  mov rax, [rbp{offset}]')
+            if self._get_type_size(var_type) == 1:
+                self.assembly_code.append(f'  movzx rax, byte [rbp{offset}]')
+            else:
+                self.assembly_code.append(f'  mov rax, [rbp{offset}]')
         self.assembly_code.append('  push rax')
 
     def visit_FunctionCall(self, node):
         arg_registers = ['rdi', 'rsi', 'rdx', 'rcx', 'r8', 'r9']
         if len(node.args) > len(arg_registers): self.error("E012", "Too many arguments in function call", node)
-        # We push arguments in reverse for the stack, but for registers it's easier to just load them directly.
-        # Let's evaluate them in order and pop into registers.
         for i, arg in enumerate(reversed(node.args)):
-             self.visit(arg)
+            self.visit(arg)
 
         for i in range(len(node.args)):
-             self.assembly_code.append(f'  pop {arg_registers[i]}')
+            self.assembly_code.append(f'  pop {arg_registers[i]}')
 
         func_name = node.name_node.value
-        # Special handling for built-in functions
         if func_name in ('print', 'putchar', 'getchar'):
-             self.assembly_code.append(f'  call {func_name}')
+            self.assembly_code.append(f'  call {func_name}')
         else:
-             self.assembly_code.append(f'  call {func_name}')
+            self.assembly_code.append(f'  call {func_name}')
         self.assembly_code.append('  push rax')
 
     def visit_CharLiteral(self, node):
@@ -275,9 +276,30 @@ class CodeGenerator(NodeVisitor):
     def visit_StringLiteral(self, node):
         label = f'L_str_{self.string_literal_counter}'
         self.string_literal_counter += 1
-        # Add string to .data section. db is 'define byte'. 0 is the null terminator.
-        self.data_section.append(f'  {label} db "{node.value}", 0')
-        # Push the address of the string onto the stack
+
+        asm_bytes = []
+        current_string = ""
+        # Iterate through the Python string which now has real escape characters
+        for char in node.value:
+            # Check for printable ASCII characters that don't need special escaping in NASM
+            if 32 <= ord(char) <= 126 and char not in ('"', "'", '`'):
+                current_string += char
+            else:
+                # If we have a pending string, define it now
+                if current_string:
+                    asm_bytes.append(f'"{current_string}"')
+                    current_string = ""
+                # Add the non-printable character as a numeric byte
+                asm_bytes.append(str(ord(char)))
+
+        # Add any remaining part of the string
+        if current_string:
+            asm_bytes.append(f'"{current_string}"')
+
+        # Add the null terminator
+        asm_bytes.append('0')
+
+        self.data_section.append(f'  {label} db ' + ', '.join(asm_bytes))
         self.assembly_code.append(f'  push {label}')
 
     def _add_putchar_function(self):
@@ -285,14 +307,14 @@ class CodeGenerator(NodeVisitor):
             'putchar:',
             '  push rbp',
             '  mov rbp, rsp',
-            '  sub rsp, 8',  # Make space for the character
-            '  mov [rbp-8], dil ; Save argument (the character, just the low byte)',
-            '  mov rax, 1 ; syscall write',
-            '  mov rdi, 1 ; stdout',
-            '  lea rsi, [rbp-8] ; address of the character on the stack',
-            '  mov rdx, 1 ; length is 1 byte',
+            '  sub rsp, 8',
+            '  mov [rbp-8], dil',
+            '  mov rax, 1',
+            '  mov rdi, 1',
+            '  lea rsi, [rbp-8]',
+            '  mov rdx, 1',
             '  syscall',
-            '  mov rsp, rbp',  # Clean up stack
+            '  mov rsp, rbp',
             '  pop rbp',
             '  ret', ''
         ])
@@ -302,13 +324,13 @@ class CodeGenerator(NodeVisitor):
             'getchar:',
             '  push rbp',
             '  mov rbp, rsp',
-            '  sub rsp, 8 ; Make space for one character',
-            '  mov rax, 0 ; syscall read',
-            '  mov rdi, 0 ; stdin',
-            '  lea rsi, [rbp-8] ; buffer to read into',
-            '  mov rdx, 1 ; read 1 byte',
+            '  sub rsp, 8',
+            '  mov rax, 0',
+            '  mov rdi, 0',
+            '  lea rsi, [rbp-8]',
+            '  mov rdx, 1',
             '  syscall',
-            '  movzx rax, byte [rbp-8] ; Move the character into RAX, zero-extending',
+            '  movzx rax, byte [rbp-8]',
             '  mov rsp, rbp',
             '  pop rbp',
             '  ret', ''
@@ -436,7 +458,8 @@ class CodeGenerator(NodeVisitor):
         elif op_type == TokenType.MULTIPLY:
             self.assembly_code.append('  imul rax, rbx')
         elif op_type == TokenType.DIVIDE:
-            self.assembly_code.append('  cqo'); self.assembly_code.append('  idiv rbx')
+            self.assembly_code.append('  cqo');
+            self.assembly_code.append('  idiv rbx')
         elif op_type in (TokenType.EQUAL, TokenType.NOT_EQUAL, TokenType.LESS, TokenType.LESS_EQUAL, TokenType.GREATER,
                          TokenType.GREATER_EQUAL):
             self.assembly_code.append('  cmp rax, rbx')
@@ -474,7 +497,7 @@ class CodeGenerator(NodeVisitor):
         self.visit(node.if_block)
         self.assembly_code.append(f'  jmp {endif_label}')
         self.assembly_code.append(f'{else_label}:')
-        self.visit(node.else_block)
+        if node.else_block: self.visit(node.else_block)
         self.assembly_code.append(f'{endif_label}:')
 
     def visit_WhileStmt(self, node):
@@ -550,3 +573,4 @@ class CodeGenerator(NodeVisitor):
             '  inc r9', '  test rax, rax', '  jnz print_int_loop',
             'print_int_write:', '  mov rax, 1', '  mov rsi, rdi', '  mov rdx, r9', '  mov rdi, 1', '  syscall', '  ret',
             ''])
+
