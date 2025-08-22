@@ -184,9 +184,31 @@ class Lexer:
     def string_literal(self):
         self.advance()  # Consume opening "
         result = ""
+        start_token = Token(None, '"', self.line, self.col - 1)
         while self.current_char is not None and self.current_char != '"':
-            result += self.current_char
+            if self.current_char == '\\':
+                self.advance()
+                if self.current_char is None:
+                    self.reporter.error("E022", "Unterminated string literal.", start_token)
+
+                if self.current_char == 'n':
+                    result += '\n'
+                elif self.current_char == 't':
+                    result += '\t'
+                elif self.current_char == '\\':
+                    result += '\\'
+                elif self.current_char == '"':
+                    result += '"'
+                else:
+                    # Keep the backslash and the character for unknown sequences
+                    result += '\\' + self.current_char
+            else:
+                result += self.current_char
             self.advance()
+
+        if self.current_char is None:
+            self.reporter.error("E022", "Unterminated string literal.", start_token)
+
         self.advance()  # Consume closing "
         return result
 
