@@ -38,22 +38,12 @@ class CodeGeneratorCpp(NodeVisitor):
     def __init__(self, reporter):
         self.reporter = reporter
 
-    def _get_token_from_node(self, node):
-        if hasattr(node, 'token'): return node.token
-        if hasattr(node, 'op'): return node.op
-        if hasattr(node, 'var_node'): return node.var_node.token
-        return None
-
-    def error(self, code, message, node):
-        self.reporter.error(code, message, self._get_token_from_node(node))
-
     def _map_type(self, type_node, is_const=False):
         base_type = type_node.value
         cpp_type = {'int': 'int64_t', 'char': 'char'}.get(base_type, base_type)
         const_prefix = "const " if is_const else ""
         type_str = f"{const_prefix}{cpp_type}"
-        if type_node.pointer_level > 0:
-            type_str += ' '
+        if type_node.pointer_level > 0: type_str += ' '
         return type_str + '*' * type_node.pointer_level
 
     def generate(self, tree):
@@ -66,9 +56,31 @@ class CodeGeneratorCpp(NodeVisitor):
         writer.add_line('#include "ignis_runtime.h"')
         writer.add_line('#include <cstdint>')
         writer.add_line('')
+        # Forward declare structs
+        for decl in node.declarations:
+            if isinstance(decl, StructDef):
+                writer.add_line(f"struct {decl.name};")
+        writer.add_line('')
+
         for decl in node.declarations:
             self.visit(decl, writer)
             writer.add_line('')
+
+    def visit_ConstDecl(self, node: ConstDecl, writer: CppWriter):
+        var_type = self._map_type(node.type_node, is_const=True)
+        var_name = node.var_node.value
+        value_expr = self.visit_expr(node.assign_node)
+        writer.add_line(f"constexpr {var_type} {var_name} = {value_expr};")
+
+    def visit_StructDef(self, node: StructDef, writer: CppWriter):
+        writer.add_line(f"struct {node.name}")
+        writer.enter_block()
+        for field in node.fields:
+            field_type = self._map_type(field.type_node)
+            field_name = field.var_node.value
+            writer.add_line(f"{field_type} {field_name};")
+        writer.exit_block()
+        writer.add_line(";")
 
     def visit_FunctionDecl(self, node: FunctionDecl, writer: CppWriter):
         return_type = "int" if node.func_name == "main" else self._map_type(node.type_node)
@@ -76,124 +88,184 @@ class CodeGeneratorCpp(NodeVisitor):
         params_list = []
         for param in node.params:
             param_type = self._map_type(param.type_node)
-            if param_type == "char *":
-                param_type = "const char *"
+            if param_type == "char *": param_type = "const char *"
             param_name = param.var_node.value
             params_list.append(f"{param_type} {param_name}")
         params = ", ".join(params_list)
         writer.add_line(f"{return_type} {func_name}({params})")
-        self.visit(node.body, writer)
+        self.visit(node.body, writer, is_function_body=True)
 
-    # --- Statement Visitors (add lines to writer) ---
-    def visit_Block(self, node: Block, writer: CppWriter):
+    # --- Statement Visitors ---
+    def visit_stmt(self, node, writer):
+        if isinstance(node, (FunctionCall, Assign)):
+            expr_code = self.visit_expr(node)
+            writer.add_line(f"{expr_code};")
+        else:
+            self.visit(node, writer)
+
+    def visit_Block(self, node: Block, writer: CppWriter, is_function_body=False):
         writer.enter_block()
-        for child in node.children:
-            if isinstance(child, FunctionCall):
-                # Якщо виклик функції стоїть окремо, він є інструкцією
-                expr_code = self.visit_expr(child, writer)
-                writer.add_line(f"{expr_code};")
+        for child in node.children[:-1]:
+            self.visit_stmt(child, writer)
+        if node.children:
+            last_child = node.children[-1]
+            if is_function_body and not isinstance(last_child, Return):
+                expr_code = self.visit_expr(last_child)
+                writer.add_line(f"return {expr_code};")
             else:
-                self.visit(child, writer)
+                self.visit_stmt(last_child, writer)
         writer.exit_block()
 
     def visit_VarDecl(self, node: VarDecl, writer: CppWriter):
         is_const_string = isinstance(node.assign_node, StringLiteral)
-        var_type = self._map_type(node.type_node, is_const=is_const_string)
+        is_mut = node.is_mutable
+        var_type = self._map_type(node.type_node, is_const=is_const_string and not is_mut)
         var_name = node.var_node.value
         if node.assign_node:
-            value_expr = self.visit_expr(node.assign_node, writer)
+            value_expr = self.visit_expr(node.assign_node)
             writer.add_line(f"{var_type} {var_name} = {value_expr};")
         else:
             writer.add_line(f"{var_type} {var_name};")
 
-    def visit_Assign(self, node: Assign, writer: CppWriter):
-        left_expr = self.visit_expr(node.left, writer)
-        right_expr = self.visit_expr(node.right, writer)
-        writer.add_line(f"{left_expr} = {right_expr};")
-
     def visit_Return(self, node: Return, writer: CppWriter):
         if node.value:
-            return_value = self.visit_expr(node.value, writer)
-            writer.add_line(f"return {return_value};")
+            writer.add_line(f"return {self.visit_expr(node.value)};")
         else:
             writer.add_line("return;")
+
+    def visit_WhileStmt(self, node: WhileStmt, writer: CppWriter):
+        writer.add_line(f"while ({self.visit_expr(node.condition)})")
+        self.visit(node.body, writer)
 
     def visit_LoopStmt(self, node: LoopStmt, writer: CppWriter):
         writer.add_line("for (;;)")
         self.visit(node.body, writer)
 
+    def visit_ForStmt(self, node: ForStmt, writer: CppWriter):
+        init_part, cond_part, inc_part = "", "", ""
+        if node.init:
+            # For loop init can be a declaration or an expression
+            if isinstance(node.init, VarDecl):
+                # We need to generate the full declaration line without the trailing semicolon
+                is_const = isinstance(node.init.assign_node, StringLiteral)
+                var_type = self._map_type(node.init.type_node, is_const=is_const and not node.init.is_mutable)
+                var_name = node.init.var_node.value
+                value_expr = self.visit_expr(node.init.assign_node)
+                init_part = f"{var_type} {var_name} = {value_expr}"
+            else:
+                init_part = self.visit_expr(node.init)
+        if node.condition: cond_part = self.visit_expr(node.condition)
+        if node.increment: inc_part = self.visit_expr(node.increment)
+        writer.add_line(f"for ({init_part}; {cond_part}; {inc_part})")
+        self.visit(node.body, writer)
+
+    def visit_BreakStmt(self, node: BreakStmt, writer: CppWriter):
+        writer.add_line("break;")
+
+    def visit_ContinueStmt(self, node: ContinueStmt, writer: CppWriter):
+        writer.add_line("continue;")
+
+    # --- Expression Visitors (return a string) ---
+    def visit_expr(self, node):
+        if isinstance(node, IfExpr): return self.visit_IfExpr_expr(node)
+        if isinstance(node, Block): return self.visit_Block_expr(node)
+        return self.visit(node)
+
+    def visit_IfExpr_expr(self, node: IfExpr):
+        writer = CppWriter()
+        writer.add_line("[&]{")
+        writer.indent_level += 1
+        condition = self.visit_expr(node.condition)
+        writer.add_line(f"if ({condition})")
+        writer.enter_block()
+        ret_val = self.visit_expr(node.if_block.children[0])
+        writer.add_line(f"return {ret_val};")
+        writer.exit_block()
+        if node.else_block:
+            writer.add_line("else")
+            if isinstance(node.else_block, IfExpr):
+                # Elif case
+                ret_val = self.visit_expr(node.else_block)
+                writer.enter_block()
+                writer.add_line(f"return {ret_val};")
+                writer.exit_block()
+            else:
+                # Else case
+                writer.enter_block()
+                ret_val = self.visit_expr(node.else_block.children[0])
+                writer.add_line(f"return {ret_val};")
+                writer.exit_block()
+        writer.indent_level -= 1
+        writer.add_line("}()")
+        return writer.get_code()
+
+    def visit_Block_expr(self, node: Block):
+        writer = CppWriter()
+        writer.add_line("[&]{")
+        writer.indent_level += 1
+        # Create a temporary writer for the block's content
+        temp_writer = CppWriter()
+        temp_writer.indent_level = writer.indent_level
+        self.visit_Block(node, temp_writer, is_function_body=True)  # Reuse logic with implicit return
+        # Add the generated content to the main writer
+        for line in temp_writer.code:
+            writer.code.append(line)
+        writer.indent_level -= 1
+        writer.add_line("}()")
+        return writer.get_code()
+
     def visit_IfExpr(self, node: IfExpr, writer: CppWriter):
-        condition = self.visit_expr(node.condition, writer)
+        condition = self.visit_expr(node.condition)
         writer.add_line(f"if ({condition})")
         self.visit(node.if_block, writer)
         if node.else_block:
             writer.add_line("else")
             self.visit(node.else_block, writer)
 
-    def visit_BreakStmt(self, node: BreakStmt, writer: CppWriter):
-        writer.add_line("break;")
+    def visit_Assign(self, node: Assign):
+        left_expr = self.visit_expr(node.left)
+        right_expr = self.visit_expr(node.right)
+        return f"{left_expr} = {right_expr}"
 
-    # --- Expression Visitors (return a string) ---
-    def visit_expr(self, node, writer):
-        return self.visit(node, writer)
-
-    def visit_Num(self, node: Num, writer: CppWriter):
+    def visit_Num(self, node: Num):
         return str(node.value)
 
-    def visit_CharLiteral(self, node: CharLiteral, writer: CppWriter):
+    def visit_CharLiteral(self, node: CharLiteral):
         val = node.value
         if val == 10: return "'\\n'"
         if val == 9: return "'\\t'"
-        if val == 13: return "'\\r'"
-        if val == 39: return "'\\''"
-        if val == 92: return "'\\\\'"
         return f"'{chr(val)}'"
 
-    def visit_StringLiteral(self, node: StringLiteral, writer: CppWriter):
-        result = ""
-        for char in node.value:
-            if char == '\n':
-                result += '\\n'
-            elif char == '\t':
-                result += '\\t'
-            elif char == '\r':
-                result += '\\r'
-            elif char == '"':
-                result += '\\"'
-            elif char == '\\':
-                result += '\\\\'
-            else:
-                result += char
-        return f'"{result}"'
+    def visit_StringLiteral(self, node: StringLiteral):
+        return f'"{node.value.encode("unicode_escape").decode("utf-8")}"'
 
-    def visit_Var(self, node: Var, writer: CppWriter):
+    def visit_Var(self, node: Var):
         return node.value
 
-    def visit_BinOp(self, node: BinOp, writer: CppWriter):
-        left_expr = self.visit_expr(node.left, writer)
-        right_expr = self.visit_expr(node.right, writer)
-        op = node.op.value
+    def visit_BinOp(self, node: BinOp):
+        left_expr = self.visit_expr(node.left)
+        right_expr = self.visit_expr(node.right)
+        op_map = {'or': '||', 'and': '&&', 'bor': '|', 'band': '&', 'bxor': '^'}
+        op = op_map.get(node.op.value, node.op.value)
         return f"({left_expr} {op} {right_expr})"
 
-    def visit_UnaryOp(self, node: UnaryOp, writer: CppWriter):
-        op_type = node.op.type
-        expr = self.visit_expr(node.expr, writer)
-        if op_type == TokenType.KW_DEREF:
-            return f"(*{expr})"
-        if op_type == TokenType.KW_ADDR:
-            return f"(&{expr})"
+    def visit_UnaryOp(self, node: UnaryOp):
+        expr = self.visit_expr(node.expr)
+        op_map = {TokenType.KW_DEREF: '(*{expr})', TokenType.KW_ADDR: '(&{expr})',
+                  TokenType.KW_NOT: '(!{expr})', TokenType.KW_BNOT: '(~{expr})'}
+        if node.op.type in op_map:
+            return op_map[node.op.type].format(expr=expr)
         return f"/* UnaryOp {node.op.value} not implemented */"
 
-    def visit_FunctionCall(self, node: FunctionCall, writer: CppWriter):
-        func_name = node.name_node.value
-        if func_name == 'print':
-            func_name = 'print_int'
-        elif func_name == 'putchar':
-            func_name = 'ignis_putchar'
-        elif func_name == 'getchar':
-            func_name = 'ignis_getchar'
+    def visit_MemberAccess(self, node: MemberAccess):
+        left_expr = self.visit_expr(node.left)
+        # We need type info to know if we should use . or ->
+        # A simple heuristic for now: if it's a deref, it was a pointer.
+        op = "->" if isinstance(node.left, UnaryOp) and node.left.op.type == TokenType.KW_DEREF else "."
+        return f"{left_expr}{op}{node.right.value}"
 
-        arg_list = [self.visit_expr(arg, writer) for arg in node.args]
-        args_str = ", ".join(arg_list)
-
+    def visit_FunctionCall(self, node: FunctionCall):
+        func_map = {'print': 'print_int', 'putchar': 'ignis_putchar', 'getchar': 'ignis_getchar'}
+        func_name = func_map.get(node.name_node.value, node.name_node.value)
+        args_str = ", ".join([self.visit_expr(arg) for arg in node.args])
         return f"{func_name}({args_str})"
