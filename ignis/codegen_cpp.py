@@ -3,6 +3,7 @@ from lexer import TokenType, Token
 
 
 class CppWriter:
+    # ... (без змін)
     def __init__(self):
         self.code = []
         self.indent_level = 0
@@ -24,6 +25,7 @@ class CppWriter:
 
 
 class NodeVisitor:
+    # ... (без змін)
     def visit(self, node, *args, **kwargs):
         method_name = 'visit_' + type(node).__name__
         visitor = getattr(self, method_name, self.generic_visit)
@@ -37,6 +39,19 @@ class NodeVisitor:
 class CodeGeneratorCpp(NodeVisitor):
     def __init__(self, reporter):
         self.reporter = reporter
+        # ### NEW: Таблиця символів та інформація про структури ###
+        self.symbol_table = {}
+        self.struct_info = {}
+
+    # ... (допоміжні функції _get_token_from_node, error без змін)
+    def _get_token_from_node(self, node):
+        if hasattr(node, 'token'): return node.token
+        if hasattr(node, 'op'): return node.op
+        if hasattr(node, 'var_node'): return node.var_node.token
+        return None
+
+    def error(self, code, message, node):
+        self.reporter.error(code, message, self._get_token_from_node(node))
 
     def _map_type(self, type_node, is_const=False):
         base_type = type_node.value
@@ -45,6 +60,40 @@ class CodeGeneratorCpp(NodeVisitor):
         type_str = f"{const_prefix}{cpp_type}"
         if type_node.pointer_level > 0: type_str += ' '
         return type_str + '*' * type_node.pointer_level
+
+    # ### NEW: Функція для визначення типу виразу ###
+    def _get_node_type(self, node):
+        if isinstance(node, Num): return Type(Token(TokenType.KW_INT, 'int'))
+        if isinstance(node, CharLiteral): return Type(Token(TokenType.KW_CHAR, 'char'))
+        if isinstance(node, StringLiteral): return Type(Token(TokenType.KW_CHAR, 'char'), pointer_level=1)
+        if isinstance(node, Var):
+            if node.value in self.symbol_table:
+                return self.symbol_table[node.value]
+            self.error("E004", f"Undeclared variable '{node.value}'", node)
+        if isinstance(node, BinOp):
+            # Спрощена логіка для арифметики вказівників
+            left_type = self._get_node_type(node.left)
+            right_type = self._get_node_type(node.right)
+            if left_type.pointer_level > 0: return left_type
+            if right_type.pointer_level > 0: return right_type
+            return left_type  # За замовчуванням
+        if isinstance(node, UnaryOp):
+            base_type = self._get_node_type(node.expr)
+            if node.op.type == TokenType.KW_ADDR:
+                return Type(base_type.token, base_type.pointer_level + 1)
+            if node.op.type == TokenType.KW_DEREF:
+                if base_type.pointer_level == 0: self.error("E005", "Cannot dereference a non-pointer type.", node)
+                return Type(base_type.token, base_type.pointer_level - 1)
+        if isinstance(node, MemberAccess):
+            struct_type = self._get_node_type(node.left)
+            struct_name = struct_type.value
+            if struct_name not in self.struct_info: self.error("E006", f"Unknown struct type '{struct_name}'", node)
+            field_name = node.right.value
+            if field_name not in self.struct_info[struct_name]: self.error("E007",
+                                                                           f"Struct '{struct_name}' has no field '{field_name}'",
+                                                                           node)
+            return self.struct_info[struct_name][field_name]
+        return Type(Token(TokenType.KW_INT, 'int'))  # Заглушка
 
     def generate(self, tree):
         writer = CppWriter()
@@ -56,15 +105,83 @@ class CodeGeneratorCpp(NodeVisitor):
         writer.add_line('#include "ignis_runtime.h"')
         writer.add_line('#include <cstdint>')
         writer.add_line('')
-        # Forward declare structs
+
+        # ### MODIFIED: Попередньо збираємо інформацію про структури ###
         for decl in node.declarations:
             if isinstance(decl, StructDef):
-                writer.add_line(f"struct {decl.name};")
+                self.struct_info[decl.name] = {field.var_node.value: field.type_node for field in decl.fields}
+                writer.add_line(f"struct {decl.name};")  # І генеруємо forward declaration
         writer.add_line('')
 
         for decl in node.declarations:
             self.visit(decl, writer)
             writer.add_line('')
+
+    def visit_FunctionDecl(self, node: FunctionDecl, writer: CppWriter):
+        # ### MODIFIED: Очищуємо та заповнюємо таблицю символів для функції ###
+        self.symbol_table = {}
+        for param in node.params:
+            self.symbol_table[param.var_node.value] = param.type_node
+
+        return_type = "int" if node.func_name == "main" else self._map_type(node.type_node)
+        func_name = node.func_name
+        params_list = []
+        for param in node.params:
+            param_type = self._map_type(param.type_node)
+            if param_type == "char *": param_type = "const char *"
+            param_name = param.var_node.value
+            params_list.append(f"{param_type} {param_name}")
+        params = ", ".join(params_list)
+        writer.add_line(f"{return_type} {func_name}({params})")
+        self.visit(node.body, writer, is_function_body=True)
+
+    # --- Statement Visitors ---
+    def visit_Block(self, node: Block, writer: CppWriter, is_function_body=False):
+        # ### MODIFIED: Керуємо таблицею символів для блоків ###
+        old_symbol_table = self.symbol_table.copy()
+        writer.enter_block()
+        # ... (решта логіки без змін)
+        for child in node.children[:-1]:
+            self.visit_stmt(child, writer)
+        if node.children:
+            last_child = node.children[-1]
+            if is_function_body and not isinstance(last_child, Return):
+                expr_code = self.visit_expr(last_child)
+                writer.add_line(f"return {expr_code};")
+            else:
+                self.visit_stmt(last_child, writer)
+        writer.exit_block()
+        self.symbol_table = old_symbol_table  # Відновлюємо таблицю символів
+
+    def visit_VarDecl(self, node: VarDecl, writer: CppWriter):
+        # ### MODIFIED: Додаємо нову змінну до таблиці символів ###
+        var_name = node.var_node.value
+        if var_name in self.symbol_table:
+            self.error("E008", f"Variable '{var_name}' is already declared in this scope.", node)
+        self.symbol_table[var_name] = node.type_node
+
+        is_const_string = isinstance(node.assign_node, StringLiteral)
+        is_mut = node.is_mutable
+        var_type = self._map_type(node.type_node, is_const=is_const_string and not is_mut)
+
+        if node.assign_node:
+            value_expr = self.visit_expr(node.assign_node)
+            writer.add_line(f"{var_type} {var_name} = {value_expr};")
+        else:
+            writer.add_line(f"{var_type} {var_name};")
+
+    # ### MODIFIED: visit_MemberAccess тепер використовує таблицю символів ###
+    def visit_MemberAccess(self, node: MemberAccess):
+        left_expr_str = self.visit_expr(node.left)
+        left_type = self._get_node_type(node.left)
+
+        # Визначаємо, який оператор використовувати
+        op = "->" if left_type.pointer_level > 0 else "."
+
+        return f"{left_expr_str}{op}{node.right.value}"
+
+    # ... (решта файлу без змін)
+    # ... (visit_ConstDecl, visit_StructDef, visit_Return, etc.)
 
     def visit_ConstDecl(self, node: ConstDecl, writer: CppWriter):
         var_type = self._map_type(node.type_node, is_const=True)
@@ -82,50 +199,12 @@ class CodeGeneratorCpp(NodeVisitor):
         writer.exit_block()
         writer.add_line(";")
 
-    def visit_FunctionDecl(self, node: FunctionDecl, writer: CppWriter):
-        return_type = "int" if node.func_name == "main" else self._map_type(node.type_node)
-        func_name = node.func_name
-        params_list = []
-        for param in node.params:
-            param_type = self._map_type(param.type_node)
-            if param_type == "char *": param_type = "const char *"
-            param_name = param.var_node.value
-            params_list.append(f"{param_type} {param_name}")
-        params = ", ".join(params_list)
-        writer.add_line(f"{return_type} {func_name}({params})")
-        self.visit(node.body, writer, is_function_body=True)
-
-    # --- Statement Visitors ---
     def visit_stmt(self, node, writer):
         if isinstance(node, (FunctionCall, Assign)):
             expr_code = self.visit_expr(node)
             writer.add_line(f"{expr_code};")
         else:
             self.visit(node, writer)
-
-    def visit_Block(self, node: Block, writer: CppWriter, is_function_body=False):
-        writer.enter_block()
-        for child in node.children[:-1]:
-            self.visit_stmt(child, writer)
-        if node.children:
-            last_child = node.children[-1]
-            if is_function_body and not isinstance(last_child, Return):
-                expr_code = self.visit_expr(last_child)
-                writer.add_line(f"return {expr_code};")
-            else:
-                self.visit_stmt(last_child, writer)
-        writer.exit_block()
-
-    def visit_VarDecl(self, node: VarDecl, writer: CppWriter):
-        is_const_string = isinstance(node.assign_node, StringLiteral)
-        is_mut = node.is_mutable
-        var_type = self._map_type(node.type_node, is_const=is_const_string and not is_mut)
-        var_name = node.var_node.value
-        if node.assign_node:
-            value_expr = self.visit_expr(node.assign_node)
-            writer.add_line(f"{var_type} {var_name} = {value_expr};")
-        else:
-            writer.add_line(f"{var_type} {var_name};")
 
     def visit_Return(self, node: Return, writer: CppWriter):
         if node.value:
@@ -144,9 +223,7 @@ class CodeGeneratorCpp(NodeVisitor):
     def visit_ForStmt(self, node: ForStmt, writer: CppWriter):
         init_part, cond_part, inc_part = "", "", ""
         if node.init:
-            # For loop init can be a declaration or an expression
             if isinstance(node.init, VarDecl):
-                # We need to generate the full declaration line without the trailing semicolon
                 is_const = isinstance(node.init.assign_node, StringLiteral)
                 var_type = self._map_type(node.init.type_node, is_const=is_const and not node.init.is_mutable)
                 var_name = node.init.var_node.value
@@ -165,7 +242,6 @@ class CodeGeneratorCpp(NodeVisitor):
     def visit_ContinueStmt(self, node: ContinueStmt, writer: CppWriter):
         writer.add_line("continue;")
 
-    # --- Expression Visitors (return a string) ---
     def visit_expr(self, node):
         if isinstance(node, IfExpr): return self.visit_IfExpr_expr(node)
         if isinstance(node, Block): return self.visit_Block_expr(node)
@@ -184,13 +260,11 @@ class CodeGeneratorCpp(NodeVisitor):
         if node.else_block:
             writer.add_line("else")
             if isinstance(node.else_block, IfExpr):
-                # Elif case
                 ret_val = self.visit_expr(node.else_block)
                 writer.enter_block()
                 writer.add_line(f"return {ret_val};")
                 writer.exit_block()
             else:
-                # Else case
                 writer.enter_block()
                 ret_val = self.visit_expr(node.else_block.children[0])
                 writer.add_line(f"return {ret_val};")
@@ -203,11 +277,9 @@ class CodeGeneratorCpp(NodeVisitor):
         writer = CppWriter()
         writer.add_line("[&]{")
         writer.indent_level += 1
-        # Create a temporary writer for the block's content
         temp_writer = CppWriter()
         temp_writer.indent_level = writer.indent_level
-        self.visit_Block(node, temp_writer, is_function_body=True)  # Reuse logic with implicit return
-        # Add the generated content to the main writer
+        self.visit_Block(node, temp_writer, is_function_body=True)
         for line in temp_writer.code:
             writer.code.append(line)
         writer.indent_level -= 1
@@ -256,13 +328,6 @@ class CodeGeneratorCpp(NodeVisitor):
         if node.op.type in op_map:
             return op_map[node.op.type].format(expr=expr)
         return f"/* UnaryOp {node.op.value} not implemented */"
-
-    def visit_MemberAccess(self, node: MemberAccess):
-        left_expr = self.visit_expr(node.left)
-        # We need type info to know if we should use . or ->
-        # A simple heuristic for now: if it's a deref, it was a pointer.
-        op = "->" if isinstance(node.left, UnaryOp) and node.left.op.type == TokenType.KW_DEREF else "."
-        return f"{left_expr}{op}{node.right.value}"
 
     def visit_FunctionCall(self, node: FunctionCall):
         func_map = {'print': 'print_int', 'putchar': 'ignis_putchar', 'getchar': 'ignis_getchar'}

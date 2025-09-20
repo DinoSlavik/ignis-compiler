@@ -28,7 +28,7 @@ int main() {
     p.y = 32;
 
     int result = add(p.x, p.y);
-    //print(result); // Expected: 42
+    print(result); // Expected: 42
 
     mut Edge e;
     e.v1 = p;
