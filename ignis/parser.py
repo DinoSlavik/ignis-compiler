@@ -72,7 +72,7 @@ class Parser:
 
     def unary_expr(self):
         token = self.current_token
-        UNARY_OPS = (TokenType.KW_NOT, TokenType.KW_BNOT, TokenType.KW_NNOT, TokenType.KW_NBNOT, TokenType.KW_ADDR,
+        UNARY_OPS = (TokenType.PLUS, TokenType.MINUS, TokenType.KW_NOT, TokenType.KW_BNOT, TokenType.KW_NNOT, TokenType.KW_NBNOT, TokenType.KW_ADDR,
                      TokenType.KW_DEREF)
         if token.type in UNARY_OPS:
             self.eat(token.type)

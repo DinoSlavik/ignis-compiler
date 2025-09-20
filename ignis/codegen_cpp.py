@@ -316,10 +316,17 @@ class CodeGeneratorCpp(NodeVisitor):
 
     def visit_UnaryOp(self, node: UnaryOp):
         expr = self.visit_expr(node.expr)
-        op_map = {TokenType.KW_DEREF: '(*{expr})', TokenType.KW_ADDR: '(&{expr})',
-                  TokenType.KW_NOT: '(!{expr})', TokenType.KW_BNOT: '(~{expr})'}
+
+        # ### MODIFIED ###: Додаємо обробку для унарних PLUS та MINUS
+        op_map = {
+            TokenType.MINUS: '(-{expr})',  # Додаємо дужки для безпеки
+            TokenType.PLUS: '(+{expr})',
+            TokenType.KW_NOT: '(!{expr})',
+            TokenType.KW_BNOT: '(~{expr})'
+        }
         if node.op.type in op_map:
             return op_map[node.op.type].format(expr=expr)
+
         return f"/* UnaryOp {node.op.value} not implemented */"
 
     def visit_FunctionCall(self, node: FunctionCall):
