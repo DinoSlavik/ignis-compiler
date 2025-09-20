@@ -176,17 +176,20 @@ class Parser:
             self.eat(TokenType.KW_IF)
         elif self.current_token.type == TokenType.KW_ELIF:
             self.eat(TokenType.KW_ELIF)
+
         self.eat(TokenType.LPAREN)
         condition = self.expr()
         self.eat(TokenType.RPAREN)
+
         if_block = self.block()
         else_block = None
+
         if self.current_token.type == TokenType.KW_ELIF:
             else_block = self.if_expression()
         elif self.current_token.type == TokenType.KW_ELSE:
-            self.eat(TokenType.KW_ELSE); else_block = self.block()
-        else:
-            self.reporter.error("E019", "Expected 'else' or 'elif' for if-expression", self.current_token)
+            self.eat(TokenType.KW_ELSE)
+            else_block = self.block()
+
         return IfExpr(condition, if_block, else_block)
 
     def while_statement(self):
@@ -266,17 +269,23 @@ class Parser:
     def statement(self):
         token_type = self.current_token.type
 
-        if token_type in (TokenType.KW_WHILE, TokenType.KW_LOOP, TokenType.KW_FOR):
-            if token_type == TokenType.KW_WHILE: return self.while_statement()
-            if token_type == TokenType.KW_LOOP: return self.loop_statement()
-            if token_type == TokenType.KW_FOR: return self.for_statement()
+        # Інструкції, які не потребують крапки з комою після себе
+        if token_type == TokenType.KW_IF:
+            return self.if_expression()
+        if token_type == TokenType.KW_WHILE:
+            return self.while_statement()
+        if token_type == TokenType.KW_LOOP:
+            return self.loop_statement()
+        if token_type == TokenType.KW_FOR:
+            return self.for_statement()
 
+        # Інструкції, які ПОТРЕБУЮТЬ крапку з комою
+        node = None
         is_var_decl = (
                 token_type in (TokenType.KW_INT, TokenType.KW_CHAR, TokenType.KW_MUT, TokenType.KW_PTR) or
                 (token_type == TokenType.IDENTIFIER and self.peek_token.type == TokenType.IDENTIFIER)
         )
 
-        node = None
         if is_var_decl:
             node = self.variable_declaration()
         elif token_type == TokenType.KW_RETURN:
@@ -291,6 +300,9 @@ class Parser:
                 if not isinstance(node, (Var, UnaryOp, MemberAccess)):
                     self.reporter.error("E010", "Invalid assignment target.", self._get_token_from_node(node))
                 node = self.assignment_statement(left_node=node)
+
+        if self.current_token.type == TokenType.RBRACE:
+            return node
 
         self.eat(TokenType.SEMICOLON)
         return node
@@ -346,7 +358,11 @@ class Parser:
         if self.current_token.type == TokenType.KW_STRUCT:
             return self.struct_definition()
 
-        type_node = self.type_spec()
+        type_node = None
+        if self.current_token.type in (TokenType.KW_INT, TokenType.KW_CHAR, TokenType.KW_PTR) or \
+           (self.current_token.type == TokenType.IDENTIFIER and self.peek_token.type == TokenType.IDENTIFIER):
+            type_node = self.type_spec()
+
         func_name = self.current_token.value
         self.eat(TokenType.IDENTIFIER)
         self.eat(TokenType.LPAREN)

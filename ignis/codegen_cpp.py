@@ -50,6 +50,7 @@ class CodeGeneratorCpp(NodeVisitor):
         self.reporter.error(code, message, self._get_token_from_node(node))
 
     def _map_type(self, type_node, is_const=False):
+        if type_node is None: return "void"
         base_type = type_node.value
         cpp_type = {'int': 'int64_t', 'char': 'char'}.get(base_type, base_type)
         const_prefix = "const " if is_const else ""
@@ -94,18 +95,15 @@ class CodeGeneratorCpp(NodeVisitor):
         self.visit(tree, writer)
         return writer.get_code()
 
-    # --- Global Scope Visitors ---
     def visit_Program(self, node: Program, writer: CppWriter):
         writer.add_line('#include "ignis_runtime.h"')
         writer.add_line('#include <cstdint>')
         writer.add_line('')
-
         for decl in node.declarations:
             if isinstance(decl, StructDef):
                 self.struct_info[decl.name] = {field.var_node.value: field.type_node for field in decl.fields}
                 writer.add_line(f"struct {decl.name};")
         writer.add_line('')
-
         for decl in node.declarations:
             self.visit(decl, writer)
             writer.add_line('')
@@ -115,7 +113,13 @@ class CodeGeneratorCpp(NodeVisitor):
         for param in node.params:
             self.symbol_table[param.var_node.value] = param.type_node
 
-        return_type = "int" if node.func_name == "main" else self._map_type(node.type_node)
+        is_void_func = node.type_node is None
+
+        if is_void_func:
+            return_type = "void"
+        else:
+            return_type = "int" if node.func_name == "main" else self._map_type(node.type_node)
+
         func_name = node.func_name
         params_list = []
         for param in node.params:
@@ -125,34 +129,39 @@ class CodeGeneratorCpp(NodeVisitor):
             params_list.append(f"{param_type} {param_name}")
         params = ", ".join(params_list)
         writer.add_line(f"{return_type} {func_name}({params})")
-        self.visit(node.body, writer, is_function_body=True)
 
-    # --- Statement Visitors ---
-    def visit_Block(self, node: Block, writer: CppWriter, is_function_body=False):
+        self.visit(node.body, writer, is_function_body=True, is_void=is_void_func)
+
+    def visit_Block(self, node: Block, writer: CppWriter, is_function_body=False, is_void=False):
         old_symbol_table = self.symbol_table.copy()
         writer.enter_block()
         for child in node.children[:-1]:
-            self.visit_stmt(child, writer)
+            self.visit_statement(child, writer)
         if node.children:
             last_child = node.children[-1]
-            if is_function_body and not isinstance(last_child, Return):
+            if is_function_body and not is_void and not isinstance(last_child, Return):
                 expr_code = self.visit_expr(last_child)
                 writer.add_line(f"return {expr_code};")
             else:
-                self.visit_stmt(last_child, writer)
+                self.visit_statement(last_child, writer)
         writer.exit_block()
         self.symbol_table = old_symbol_table
+
+    def visit_statement(self, node, writer):
+        if isinstance(node, (FunctionCall, Assign)):
+            expr_code = self.visit_expr(node)
+            writer.add_line(f"{expr_code};")
+        else:
+            self.visit(node, writer)
 
     def visit_VarDecl(self, node: VarDecl, writer: CppWriter):
         var_name = node.var_node.value
         if var_name in self.symbol_table:
             self.error("E008", f"Variable '{var_name}' is already declared in this scope.", node)
         self.symbol_table[var_name] = node.type_node
-
         is_const_string = isinstance(node.assign_node, StringLiteral)
         is_mut = node.is_mutable
         var_type = self._map_type(node.type_node, is_const=is_const_string and not is_mut)
-
         if node.assign_node:
             value_expr = self.visit_expr(node.assign_node)
             writer.add_line(f"{var_type} {var_name} = {value_expr};")
@@ -160,17 +169,13 @@ class CodeGeneratorCpp(NodeVisitor):
             writer.add_line(f"{var_type} {var_name};")
 
     def visit_BinOp(self, node: BinOp):
-        # ### NEW: Обробка оператора порівняння типів '===' ###
         if node.op.type == TokenType.TYPE_EQUAL:
             left_type = self._get_node_type(node.left)
             right_type = self._get_node_type(node.right)
-
-            # Порівнюємо базовий тип та рівень вказівника
             if left_type.value == right_type.value and left_type.pointer_level == right_type.pointer_level:
                 return "true"
             else:
                 return "false"
-
         left_expr = self.visit_expr(node.left)
         right_expr = self.visit_expr(node.right)
         op_map = {'or': '||', 'and': '&&', 'bor': '|', 'band': '&', 'bxor': '^'}
@@ -198,13 +203,6 @@ class CodeGeneratorCpp(NodeVisitor):
             writer.add_line(f"{field_type} {field_name};")
         writer.exit_block()
         writer.add_line(";")
-
-    def visit_stmt(self, node, writer):
-        if isinstance(node, (FunctionCall, Assign)):
-            expr_code = self.visit_expr(node)
-            writer.add_line(f"{expr_code};")
-        else:
-            self.visit(node, writer)
 
     def visit_Return(self, node: Return, writer: CppWriter):
         if node.value:
@@ -316,17 +314,11 @@ class CodeGeneratorCpp(NodeVisitor):
 
     def visit_UnaryOp(self, node: UnaryOp):
         expr = self.visit_expr(node.expr)
-
-        # ### MODIFIED ###: Додаємо обробку для унарних PLUS та MINUS
-        op_map = {
-            TokenType.MINUS: '(-{expr})',  # Додаємо дужки для безпеки
-            TokenType.PLUS: '(+{expr})',
-            TokenType.KW_NOT: '(!{expr})',
-            TokenType.KW_BNOT: '(~{expr})'
-        }
+        op_map = {TokenType.KW_DEREF: '(*{expr})', TokenType.KW_ADDR: '(&{expr})',
+                  TokenType.KW_NOT: '(!{expr})', TokenType.KW_BNOT: '(~{expr})',
+                  TokenType.MINUS: '(-{expr})', TokenType.PLUS: '(+{expr})'}
         if node.op.type in op_map:
             return op_map[node.op.type].format(expr=expr)
-
         return f"/* UnaryOp {node.op.value} not implemented */"
 
     def visit_FunctionCall(self, node: FunctionCall):

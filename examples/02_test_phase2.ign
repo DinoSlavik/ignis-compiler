@@ -39,8 +39,8 @@ int test_operators(int a, int b) {
 // Робота зі структурами через вказівники
 void move_game_object(ptr GameObject obj, int dx, int dy) {
     // Доступ до полів через вказівник (->)
-    deref obj.position.x = deref obj.position.x + dx;
-    deref obj.position.y = deref obj.position.y + dy;
+    obj.position.x = obj.position.x + dx;
+    obj.position.y = obj.position.y + dy;
 }
 
 int main() {
