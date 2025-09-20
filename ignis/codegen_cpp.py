@@ -3,7 +3,6 @@ from lexer import TokenType, Token
 
 
 class CppWriter:
-    # ... (без змін)
     def __init__(self):
         self.code = []
         self.indent_level = 0
@@ -25,7 +24,6 @@ class CppWriter:
 
 
 class NodeVisitor:
-    # ... (без змін)
     def visit(self, node, *args, **kwargs):
         method_name = 'visit_' + type(node).__name__
         visitor = getattr(self, method_name, self.generic_visit)
@@ -39,11 +37,9 @@ class NodeVisitor:
 class CodeGeneratorCpp(NodeVisitor):
     def __init__(self, reporter):
         self.reporter = reporter
-        # ### NEW: Таблиця символів та інформація про структури ###
         self.symbol_table = {}
         self.struct_info = {}
 
-    # ... (допоміжні функції _get_token_from_node, error без змін)
     def _get_token_from_node(self, node):
         if hasattr(node, 'token'): return node.token
         if hasattr(node, 'op'): return node.op
@@ -61,7 +57,6 @@ class CodeGeneratorCpp(NodeVisitor):
         if type_node.pointer_level > 0: type_str += ' '
         return type_str + '*' * type_node.pointer_level
 
-    # ### NEW: Функція для визначення типу виразу ###
     def _get_node_type(self, node):
         if isinstance(node, Num): return Type(Token(TokenType.KW_INT, 'int'))
         if isinstance(node, CharLiteral): return Type(Token(TokenType.KW_CHAR, 'char'))
@@ -71,12 +66,11 @@ class CodeGeneratorCpp(NodeVisitor):
                 return self.symbol_table[node.value]
             self.error("E004", f"Undeclared variable '{node.value}'", node)
         if isinstance(node, BinOp):
-            # Спрощена логіка для арифметики вказівників
             left_type = self._get_node_type(node.left)
             right_type = self._get_node_type(node.right)
             if left_type.pointer_level > 0: return left_type
             if right_type.pointer_level > 0: return right_type
-            return left_type  # За замовчуванням
+            return left_type
         if isinstance(node, UnaryOp):
             base_type = self._get_node_type(node.expr)
             if node.op.type == TokenType.KW_ADDR:
@@ -93,7 +87,7 @@ class CodeGeneratorCpp(NodeVisitor):
                                                                            f"Struct '{struct_name}' has no field '{field_name}'",
                                                                            node)
             return self.struct_info[struct_name][field_name]
-        return Type(Token(TokenType.KW_INT, 'int'))  # Заглушка
+        return Type(Token(TokenType.KW_INT, 'int'))
 
     def generate(self, tree):
         writer = CppWriter()
@@ -106,11 +100,10 @@ class CodeGeneratorCpp(NodeVisitor):
         writer.add_line('#include <cstdint>')
         writer.add_line('')
 
-        # ### MODIFIED: Попередньо збираємо інформацію про структури ###
         for decl in node.declarations:
             if isinstance(decl, StructDef):
                 self.struct_info[decl.name] = {field.var_node.value: field.type_node for field in decl.fields}
-                writer.add_line(f"struct {decl.name};")  # І генеруємо forward declaration
+                writer.add_line(f"struct {decl.name};")
         writer.add_line('')
 
         for decl in node.declarations:
@@ -118,7 +111,6 @@ class CodeGeneratorCpp(NodeVisitor):
             writer.add_line('')
 
     def visit_FunctionDecl(self, node: FunctionDecl, writer: CppWriter):
-        # ### MODIFIED: Очищуємо та заповнюємо таблицю символів для функції ###
         self.symbol_table = {}
         for param in node.params:
             self.symbol_table[param.var_node.value] = param.type_node
@@ -137,10 +129,8 @@ class CodeGeneratorCpp(NodeVisitor):
 
     # --- Statement Visitors ---
     def visit_Block(self, node: Block, writer: CppWriter, is_function_body=False):
-        # ### MODIFIED: Керуємо таблицею символів для блоків ###
         old_symbol_table = self.symbol_table.copy()
         writer.enter_block()
-        # ... (решта логіки без змін)
         for child in node.children[:-1]:
             self.visit_stmt(child, writer)
         if node.children:
@@ -151,10 +141,9 @@ class CodeGeneratorCpp(NodeVisitor):
             else:
                 self.visit_stmt(last_child, writer)
         writer.exit_block()
-        self.symbol_table = old_symbol_table  # Відновлюємо таблицю символів
+        self.symbol_table = old_symbol_table
 
     def visit_VarDecl(self, node: VarDecl, writer: CppWriter):
-        # ### MODIFIED: Додаємо нову змінну до таблиці символів ###
         var_name = node.var_node.value
         if var_name in self.symbol_table:
             self.error("E008", f"Variable '{var_name}' is already declared in this scope.", node)
@@ -170,18 +159,29 @@ class CodeGeneratorCpp(NodeVisitor):
         else:
             writer.add_line(f"{var_type} {var_name};")
 
-    # ### MODIFIED: visit_MemberAccess тепер використовує таблицю символів ###
+    def visit_BinOp(self, node: BinOp):
+        # ### NEW: Обробка оператора порівняння типів '===' ###
+        if node.op.type == TokenType.TYPE_EQUAL:
+            left_type = self._get_node_type(node.left)
+            right_type = self._get_node_type(node.right)
+
+            # Порівнюємо базовий тип та рівень вказівника
+            if left_type.value == right_type.value and left_type.pointer_level == right_type.pointer_level:
+                return "true"
+            else:
+                return "false"
+
+        left_expr = self.visit_expr(node.left)
+        right_expr = self.visit_expr(node.right)
+        op_map = {'or': '||', 'and': '&&', 'bor': '|', 'band': '&', 'bxor': '^'}
+        op = op_map.get(node.op.value, node.op.value)
+        return f"({left_expr} {op} {right_expr})"
+
     def visit_MemberAccess(self, node: MemberAccess):
         left_expr_str = self.visit_expr(node.left)
         left_type = self._get_node_type(node.left)
-
-        # Визначаємо, який оператор використовувати
         op = "->" if left_type.pointer_level > 0 else "."
-
         return f"{left_expr_str}{op}{node.right.value}"
-
-    # ... (решта файлу без змін)
-    # ... (visit_ConstDecl, visit_StructDef, visit_Return, etc.)
 
     def visit_ConstDecl(self, node: ConstDecl, writer: CppWriter):
         var_type = self._map_type(node.type_node, is_const=True)
@@ -313,13 +313,6 @@ class CodeGeneratorCpp(NodeVisitor):
 
     def visit_Var(self, node: Var):
         return node.value
-
-    def visit_BinOp(self, node: BinOp):
-        left_expr = self.visit_expr(node.left)
-        right_expr = self.visit_expr(node.right)
-        op_map = {'or': '||', 'and': '&&', 'bor': '|', 'band': '&', 'bxor': '^'}
-        op = op_map.get(node.op.value, node.op.value)
-        return f"({left_expr} {op} {right_expr})"
 
     def visit_UnaryOp(self, node: UnaryOp):
         expr = self.visit_expr(node.expr)
