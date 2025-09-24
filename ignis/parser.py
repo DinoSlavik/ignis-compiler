@@ -280,7 +280,6 @@ class Parser:
                 node = self.assignment_statement(left_node=node)
         return node
 
-    # ### FIX: Повністю переписана логіка для блоків ###
     def block(self):
         self.eat(TokenType.LBRACE)
         nodes = []
@@ -296,6 +295,8 @@ class Parser:
             # Якщо після інструкції одразу йде '}', це був вираз, що повертається
             elif self.current_token.type == TokenType.RBRACE:
                 break
+            elif isinstance(node, (ForStmt, LoopStmt, WhileStmt)):
+                pass # ignoring semicolon, if after loop
             # В іншому випадку, після інструкції має бути ';'
             else:
                 self.reporter.error("PE001", "Expected ';' after statement", self.current_token)
