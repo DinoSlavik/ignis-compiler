@@ -113,7 +113,7 @@ class CodeGeneratorCpp(NodeVisitor):
         for param in node.params:
             self.symbol_table[param.var_node.value] = param.type_node
 
-        is_void_func = node.type_node is None
+        is_void_func = node.type_node == Type(TokenType.KW_VOID)
 
         if is_void_func:
             return_type = "void"

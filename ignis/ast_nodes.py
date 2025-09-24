@@ -45,6 +45,11 @@ class Type(AST):
     def __init__(self, token, pointer_level=0):
         self.token, self.value, self.pointer_level = token, token.value if token else "struct", pointer_level
     def __repr__(self): return f"{'ptr ' * self.pointer_level}{self.value}"
+    def __eq__(self, other):
+        if type(other) == type(self):
+            return self.value == other.value and self.pointer_level == other.pointer_level
+        else:
+            raise NotImplementedError
 class Assign(AST):
     def __init__(self, left, op, right): self.left, self.op, self.right = left, op, right
     def __repr__(self):

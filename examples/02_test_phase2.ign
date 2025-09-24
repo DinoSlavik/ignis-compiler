@@ -86,7 +86,7 @@ int main() {
     // 4. Тест циклу loop та expression-based block
     mut int countdown = 3;
     loop {
-        if (countdown == 0) { break; }
+        if (countdown == 0) { break; };
 
         int block_val = {
             print(countdown); // 3, 2, 1
