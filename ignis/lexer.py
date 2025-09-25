@@ -27,6 +27,7 @@ class TokenType(Enum):
 
     # Keywords
     KW_INT = 'int'
+    KW_VOID = 'void'
     KW_CHAR = 'char'
     KW_MUT = 'mut'
     KW_CONST = 'const'
@@ -90,6 +91,7 @@ class Token:
 
 RESERVED_KEYWORDS = {
     'int': TokenType.KW_INT,
+    'void': TokenType.KW_VOID,
     'char': TokenType.KW_CHAR,
     'mut': TokenType.KW_MUT,
     'const': TokenType.KW_CONST,
@@ -169,7 +171,7 @@ class Lexer:
             nesting_level = 1
             while nesting_level > 0:
                 if self.current_char is None:
-                    self.reporter.error("E015", "Unterminated multi-line comment", start_token)
+                    self.reporter.error("LE015", "Unterminated multi-line comment", start_token)
                 elif self.current_char == '/' and self.peek() == '*': self.advance(); self.advance(); nesting_level += 1
                 elif self.current_char == '*' and self.peek() == '/': self.advance(); self.advance(); nesting_level -= 1
                 else: self.advance()
@@ -189,7 +191,7 @@ class Lexer:
             if self.current_char == '\\':
                 self.advance()
                 if self.current_char is None:
-                    self.reporter.error("E022", "Unterminated string literal.", start_token)
+                    self.reporter.error("LE022", "Unterminated string literal.", start_token)
 
                 if self.current_char == 'n':
                     result += '\n'
@@ -207,7 +209,7 @@ class Lexer:
             self.advance()
 
         if self.current_char is None:
-            self.reporter.error("E022", "Unterminated string literal.", start_token)
+            self.reporter.error("LE022", "Unterminated string literal.", start_token)
 
         self.advance()  # Consume closing "
         return result
@@ -234,7 +236,7 @@ class Lexer:
 
         self.advance()
         if self.current_char != "'":
-            self.reporter.error("E021", "Unterminated or multi-character character literal",
+            self.reporter.error("LE021", "Unterminated or multi-character character literal",
                                 Token(None, "'", self.line, self.col - 1))
 
         self.advance()  # Consume closing '
@@ -283,5 +285,5 @@ class Lexer:
                 token = Token(token_type, token_type.value, line, col); self.advance()
                 return token
             except ValueError:
-                self.reporter.error("E016", f"Invalid character '{self.current_char}'", Token(None, self.current_char, line, col))
+                self.reporter.error("LE016", f"Invalid character '{self.current_char}'", Token(None, self.current_char, line, col))
         return Token(TokenType.EOF, None, self.line, self.col)

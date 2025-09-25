@@ -1,6 +1,7 @@
 from lexer import TokenType
 from ast_nodes import *
 
+
 class Parser:
     def __init__(self, lexer, reporter):
         self.lexer = lexer
@@ -9,15 +10,10 @@ class Parser:
         self.peek_token = self.lexer.get_next_token()
 
     def _format_token_type(self, token_type):
-        if not token_type:
-            return "<unknown token>"
-        # Use the name for keywords, which is more descriptive (e.g., KW_INT -> 'int')
-        if token_type.name.startswith('KW_'):
-            return f"keyword '{token_type.value}'"
-        # Use the value for symbols (e.g., '+', '==')
-        if token_type.value and not token_type.value.isalnum() and len(token_type.value) < 3:
-            return f"'{token_type.value}'"
-        # Default to the enum name (e.g., IDENTIFIER, INTEGER)
+        if not token_type: return "<unknown token>"
+        if token_type.name.startswith('KW_'): return f"keyword '{token_type.value}'"
+        if token_type.value and not token_type.value.isalnum() and len(
+            token_type.value) < 3: return f"'{token_type.value}'"
         return token_type.name
 
     def eat(self, token_type):
@@ -27,7 +23,7 @@ class Parser:
         else:
             expected_str = self._format_token_type(token_type)
             got_str = self._format_token_type(self.current_token.type)
-            self.reporter.error("E001", f"Unexpected token: expected {expected_str}, but got {got_str}",
+            self.reporter.error("PE001", f"Unexpected token: expected {expected_str}, but got {got_str}",
                                 self.current_token)
 
     def type_spec(self):
@@ -36,10 +32,10 @@ class Parser:
             pointer_level += 1
             self.eat(TokenType.KW_PTR)
         token = self.current_token
-        if token.type in (TokenType.KW_INT, TokenType.KW_CHAR, TokenType.IDENTIFIER):
+        if token.type in (TokenType.KW_INT, TokenType.KW_VOID, TokenType.KW_CHAR, TokenType.IDENTIFIER):
             self.eat(token.type)
             return Type(token, pointer_level)
-        self.reporter.error("E017", "Expected a base type specifier (e.g., 'int', 'char' or a struct name)", token)
+        self.reporter.error("PE017", "Expected a base type specifier (e.g., 'int', 'char' or a struct name)", token)
 
     def factor(self):
         token = self.current_token
@@ -55,14 +51,17 @@ class Parser:
             return self.block()
         elif token.type == TokenType.KW_IF:
             return self.if_expression()
+
         node = None
         if token.type == TokenType.IDENTIFIER:
             if self.peek_token.type == TokenType.LPAREN:
                 node = self.function_call()
             else:
-                self.eat(TokenType.IDENTIFIER); node = Var(token)
+                self.eat(TokenType.IDENTIFIER)
+                node = Var(token)
         else:
-            self.reporter.error("E018", "Invalid factor in expression", token)
+            self.reporter.error("PE018", "Invalid factor in expression", token)
+
         while self.current_token.type == TokenType.DOT:
             self.eat(TokenType.DOT)
             field_node = Var(self.current_token)
@@ -70,9 +69,11 @@ class Parser:
             node = MemberAccess(left=node, right=field_node)
         return node
 
+    # ... (методи від unary_expr до expr без змін)
     def unary_expr(self):
         token = self.current_token
-        UNARY_OPS = (TokenType.KW_NOT, TokenType.KW_BNOT, TokenType.KW_NNOT, TokenType.KW_NBNOT, TokenType.KW_ADDR,
+        UNARY_OPS = (TokenType.PLUS, TokenType.MINUS, TokenType.KW_NOT, TokenType.KW_BNOT, TokenType.KW_NNOT,
+                     TokenType.KW_NBNOT, TokenType.KW_ADDR,
                      TokenType.KW_DEREF)
         if token.type in UNARY_OPS:
             self.eat(token.type)
@@ -83,10 +84,7 @@ class Parser:
         node = self.unary_expr()
         while self.current_token.type in (TokenType.MULTIPLY, TokenType.DIVIDE):
             token = self.current_token
-            if token.type == TokenType.MULTIPLY:
-                self.eat(TokenType.MULTIPLY)
-            elif token.type == TokenType.DIVIDE:
-                self.eat(TokenType.DIVIDE)
+            self.eat(token.type)
             node = BinOp(left=node, op=token, right=self.unary_expr())
         return node
 
@@ -94,10 +92,7 @@ class Parser:
         node = self.term()
         while self.current_token.type in (TokenType.PLUS, TokenType.MINUS):
             token = self.current_token
-            if token.type == TokenType.PLUS:
-                self.eat(TokenType.PLUS)
-            elif token.type == TokenType.MINUS:
-                self.eat(TokenType.MINUS)
+            self.eat(token.type)
             node = BinOp(left=node, op=token, right=self.term())
         return node
 
@@ -172,10 +167,7 @@ class Parser:
         return node
 
     def if_expression(self):
-        if self.current_token.type == TokenType.KW_IF:
-            self.eat(TokenType.KW_IF)
-        elif self.current_token.type == TokenType.KW_ELIF:
-            self.eat(TokenType.KW_ELIF)
+        self.eat(self.current_token.type)  # Eat if or elif
         self.eat(TokenType.LPAREN)
         condition = self.expr()
         self.eat(TokenType.RPAREN)
@@ -184,9 +176,8 @@ class Parser:
         if self.current_token.type == TokenType.KW_ELIF:
             else_block = self.if_expression()
         elif self.current_token.type == TokenType.KW_ELSE:
-            self.eat(TokenType.KW_ELSE); else_block = self.block()
-        else:
-            self.reporter.error("E019", "Expected 'else' or 'elif' for if-expression", self.current_token)
+            self.eat(TokenType.KW_ELSE)
+            else_block = self.block()
         return IfExpr(condition, if_block, else_block)
 
     def while_statement(self):
@@ -265,18 +256,14 @@ class Parser:
 
     def statement(self):
         token_type = self.current_token.type
-
-        if token_type in (TokenType.KW_WHILE, TokenType.KW_LOOP, TokenType.KW_FOR):
+        if token_type in (TokenType.KW_IF, TokenType.KW_WHILE, TokenType.KW_LOOP, TokenType.KW_FOR):
+            if token_type == TokenType.KW_IF: return self.if_expression()
             if token_type == TokenType.KW_WHILE: return self.while_statement()
             if token_type == TokenType.KW_LOOP: return self.loop_statement()
             if token_type == TokenType.KW_FOR: return self.for_statement()
-
-        is_var_decl = (
-                token_type in (TokenType.KW_INT, TokenType.KW_CHAR, TokenType.KW_MUT, TokenType.KW_PTR) or
-                (token_type == TokenType.IDENTIFIER and self.peek_token.type == TokenType.IDENTIFIER)
-        )
-
         node = None
+        is_var_decl = (token_type in (TokenType.KW_INT, TokenType.KW_CHAR, TokenType.KW_MUT, TokenType.KW_PTR) or
+                       (token_type == TokenType.IDENTIFIER and self.peek_token.type == TokenType.IDENTIFIER))
         if is_var_decl:
             node = self.variable_declaration()
         elif token_type == TokenType.KW_RETURN:
@@ -289,20 +276,31 @@ class Parser:
             node = self.expr()
             if self.current_token.type == TokenType.ASSIGN:
                 if not isinstance(node, (Var, UnaryOp, MemberAccess)):
-                    self.reporter.error("E010", "Invalid assignment target.", self._get_token_from_node(node))
+                    self.reporter.error("PE010", "Invalid assignment target.", self._get_token_from_node(node))
                 node = self.assignment_statement(left_node=node)
-
-        self.eat(TokenType.SEMICOLON)
         return node
 
     def block(self):
         self.eat(TokenType.LBRACE)
         nodes = []
         while self.current_token.type != TokenType.RBRACE:
-            if self.peek_token.type == TokenType.RBRACE:
-                nodes.append(self.expr())
+            node = self.statement()
+            nodes.append(node)
+            # Якщо після інструкції йде ';', це звичайна інструкція
+            if self.current_token.type == TokenType.SEMICOLON:
+                self.eat(TokenType.SEMICOLON)
+                # Якщо одразу після ';' йде '}', це може бути порожня інструкція
+                if self.current_token.type == TokenType.RBRACE:
+                    break
+            # Якщо після інструкції одразу йде '}', це був вираз, що повертається
+            elif self.current_token.type == TokenType.RBRACE:
+                break
+            elif isinstance(node, (ForStmt, LoopStmt, WhileStmt)):
+                pass # ignoring semicolon, if after loop
+            # В іншому випадку, після інструкції має бути ';'
             else:
-                nodes.append(self.statement())
+                self.reporter.error("PE001", "Expected ';' after statement", self.current_token)
+
         self.eat(TokenType.RBRACE)
         root = Block()
         for node in nodes: root.children.append(node)
@@ -346,19 +344,49 @@ class Parser:
         if self.current_token.type == TokenType.KW_STRUCT:
             return self.struct_definition()
 
-        type_node = self.type_spec()
-        func_name = self.current_token.value
-        self.eat(TokenType.IDENTIFIER)
-        self.eat(TokenType.LPAREN)
-        params = self.parameter_list()
-        self.eat(TokenType.RPAREN)
-        body = self.block()
-        return FunctionDecl(type_node, func_name, params, body)
+        # Використовуємо "погляд наперед", щоб розрізнити декларацію функції та змінної
+        is_func_decl = False
+        i = 0
+        # Пропускаємо можливі 'ptr'
+        while self.lexer.text[self.lexer.pos + i:].startswith('ptr'): i += 4
+        # Пропускаємо пробіли
+        while self.lexer.text[self.lexer.pos + i].isspace(): i += 1
+        # Пропускаємо тип
+        while self.lexer.text[self.lexer.pos + i].isalnum(): i += 1
+        # Пропускаємо пробіли
+        while self.lexer.text[self.lexer.pos + i].isspace(): i += 1
+        # Пропускаємо ім'я
+        while self.lexer.text[self.lexer.pos + i].isalnum(): i += 1
+        # Пропускаємо пробіли
+        while self.lexer.text[self.lexer.pos + i].isspace(): i += 1
+        # Якщо наступний символ '(', це функція
+        if self.lexer.text[self.lexer.pos + i] == '(':
+            is_func_decl = True
+
+        # Костиль, який перевіряє, чи не є це функцією без типу повернення
+        if self.current_token.type == TokenType.IDENTIFIER and self.peek_token.type == TokenType.LPAREN:
+            is_func_decl = True
+
+        if is_func_decl:
+            type_node = None
+            if self.current_token.type != TokenType.IDENTIFIER or self.peek_token.type != TokenType.LPAREN:
+                type_node = self.type_spec()
+            func_name = self.current_token.value
+            self.eat(TokenType.IDENTIFIER)
+            self.eat(TokenType.LPAREN)
+            params = self.parameter_list()
+            self.eat(TokenType.RPAREN)
+            body = self.block()
+            return FunctionDecl(type_node, func_name, params, body)
+        else:
+            node = self.variable_declaration()
+            self.eat(TokenType.SEMICOLON)
+            return node
 
     def parse(self):
         declarations = []
         while self.current_token.type != TokenType.EOF: declarations.append(self.declaration())
-        if not declarations: self.reporter.error("E020", "Source file contains no code (or no 'main' function).",
+        if not declarations: self.reporter.error("PE020", "Source file contains no code (or no 'main' function).",
                                                  self.current_token)
         return Program(declarations)
 
