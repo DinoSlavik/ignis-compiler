@@ -20,7 +20,7 @@ When using the assembly code generator (temporarily unavailable):
 
 **Ensure these tools are installed and available in your system's `PATH`.**
 
-## 2. Installation
+## 2. Installation and Running compiler
 To get started, download the repository from GitHub. The compiler script is located at `ignis/main.py` within the downloaded repository.
 
 ## 3. Your First Program: Hello, World!

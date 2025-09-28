@@ -11,10 +11,10 @@ These are the basic operators for mathematical calculations.
 
 ```Ignis
 
-int res_add = 20 + 10; // result = 30
-int res_sub = 20 - 10; // result = 10
-int res_mul = 20 * 10; // result = 200
-int res_div = 20 / 10; // result = 2
+int result = 20 + 10; // result = 30
+int result = 20 - 10; // result = 10
+int result = 20 * 10; // result = 200
+int result = 20 / 10; // result = 2
 ```
 
 _Note: The behavior of division by zero (`0`) is currently undefined and may result in a runtime error._
@@ -49,7 +49,7 @@ These operators treat any non-zero number as "true" and `0` as "false". The resu
 - `not` : Logical NOT (0 -> 1, non-zero -> 0)
 - `xor` : Exclusive OR
 - `nand`, `nor`, `xnor`: The inverted versions of their respective operators.
-- `nnot`: Boolean Coercion. Converts any non-zero value to `1`, and `0` to `0`.
+- `nnot`: Bulenaizer. Converts any non-zero value to `1`, and `0` to `0`.
 
 ```Ignis
 
@@ -62,12 +62,10 @@ print(1 xor 1); // Prints 0
 // Inverted logical operators
 print(1 nand 0); // Prints 1
 print(1 nor 1);  // Prints 0
-print(1 xnor 1); // Prints 1
-
-// The nnot operator
-print(nnot 123); // Prints 1
-print(nnot -123); // Prints 1
+print(nnot 25); // Prints 1
+print(nnot -25); // Prints 1
 print(nnot 0);   // Prints 0
+print(1 xnor 1); // Prints 1
 ```
 
 _Note: nnot was initially a joke, but has been repurposed into a useful feature for casting any value to a strict boolean (`1` or `0`)._

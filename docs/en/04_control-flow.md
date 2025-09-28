@@ -59,7 +59,7 @@ int is_passing = 1 if score >= 60 else 0;
 print(is_passing); // Prints 1
 ```
 
-Note: Ideologically, this is just syntactic sugar for the standard conditional expression.
+Note: Conceptually, this is just syntactic sugar for the standard conditional expression.
 
 ## Loops
 The language provides three types of loops for different scenarios.
