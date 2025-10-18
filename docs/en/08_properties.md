@@ -29,6 +29,13 @@ Properties are, in essence, keyword modifiers that are applied to entities. They
 -   **Numeral System (`nsys<base>`)**:
     -   Applies to numeric types to specify the numeral system in which to store and process values. For systems with a base > 10, literals are written in backticks.
     -   **Example**: `nsys16 int hex_val = 'FF';`
+- Default Behavior (`default`):
+
+    - Applies to functions and methods.
+
+    - Instructs the compiler on which of several overloaded versions of a function to use if a call is ambiguous and does not contain named arguments.
+
+    - Example: `default int my_func(int x, int y) { ... }`
 
 ### Dynamic Property Modification
 
@@ -56,5 +63,5 @@ while (a > 5) {
 // a = 10; // Error: attempt to modify an immutable variable
 ```
 
-**Important**: Not all properties will be dynamically modifiable. For example, changing the **type**, **bit width**, or **numeral system** of a variable after its creation will not be possible.
+**Important**: Not all properties will be dynamically modifiable. For example, changing the **type**, or  **bit width** of a variable after its creation will not be possible.
 

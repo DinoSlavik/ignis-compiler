@@ -1,11 +1,14 @@
 # 5. Compound Data Types: Structs and Pointers
-Ignis allows you to create more complex data structures using struct and to manage memory directly using pointers.
+Ignis provides two primary tools for creating your own complex data types: structs and classes. They allow you to group data and logic, while pointers provide flexible memory management for working with them.
 
 ## Structs
-Structs allow you to group multiple variables (fields) into a single logical data type. They are the primary tool for creating your own custom types.
 
-### Declaring a Struct
-A struct is declared using the struct keyword, followed by the type name and a block of fields in curly braces.
+Structs are a simple and efficient way to group several variables (fields) into a single logical type. The main purpose of structs is to store data. They do not contain any associated logic (methods).
+
+### Declaring and Using a Struct
+
+A struct is declared using the struct keyword, followed by the type name and a block of fields. 
+Fields are accessed using the `.` (dot) operator.
 
 ```Ignis
 
@@ -13,12 +16,6 @@ struct Point {
     int x;
     int y;
 }
-```
-
-### Creation and Usage
-After declaring a struct, you can create instances (variables) of it and work with its fields using the . (dot) operator.
-
-```Ignis
 
 // Create a mutable variable of type Point
 mut Point p;
@@ -30,10 +27,34 @@ p.y = 20;
 print(p.x); // Prints 10
 ```
 
-It is important to note that structs in Ignis are value types. This means that when you assign one struct variable to another, a full copy of the data is created.
+It's important to note that structs in Ignis are value types. This means that when you assign one struct variable to another, a full copy of the data is created.
 
-## Pointers (ptr)
-Pointers are variables that store the memory address of another variable. They allow for indirect access and modification of data.
+## Classes
+
+Unlike structs, classes allow you to encapsulate—combine into a single entity—both data (fields) and the logic to process that data (methods). They are the primary building block for object-oriented programming (OOP) in Ignis.
+
+### Declaration
+
+The syntax for declaring a class is similar to that of a struct but uses the class keyword and can include access modifiers (public, private).
+
+```Ignis
+
+// Preliminary syntax
+class Player {
+    public:
+        ptr Vector2D position;
+        char id;
+
+    private:
+        int health;
+}
+```
+
+Note: A detailed description of class syntax, methods, inheritance, and other OOP concepts will be provided in the corresponding documentation section.
+
+## Pointers (`ptr`)
+
+Pointers are variables that store the memory address of another variable. They are a key tool for working efficiently with both structs and classes, allowing you to avoid the expensive copying of large objects.
 
 The key operators for working with pointers are:
 
@@ -46,39 +67,22 @@ The key operators for working with pointers are:
 ```Ignis
 
 mut int x = 10;
-
-// 'p' is a pointer that holds the address of 'x'
-mut ptr int p = addr x;
-
-// Dereference the pointer to read the value of 'x'
-print(deref p); // Prints 10
-
-// Dereference to change the value of 'x' through the pointer
-deref p = 42;
-
-print(x); // Prints 42, because 'p' pointed to 'x'
+mut ptr int p = addr x; // 'p' stores the address of 'x'
+deref p = 42;           // Change the value of 'x' through the pointer
+print(x);               // Prints 42
 ```
 
-### Pointers and Structs
-Pointers are especially useful when working with structs, as they allow you to pass references to large objects into functions, avoiding expensive copying.
+### Pointers and Field Access
 
-Accessing Fields via a Pointer
-Ignis simplifies working with pointers to structs. Unlike in C/C++, you do not need a special operator (like ->). The . (dot) operator works for both struct values and pointers to them. The compiler automatically understands when to dereference the pointer.
+Ignis simplifies working with pointers to structs and classes. The `.` (dot) operator works for both the objects themselves and pointers to them. The compiler automatically understands when to dereference the pointer.
 
 ```Ignis
 
-struct GameObject {
-    ptr Vector2D position;
-    char id;
-}
-
-// This function accepts a pointer to a GameObject
-void move_game_object(ptr GameObject obj, int dx, int dy) {
-    // Accessing fields through a pointer looks the same
-    // as direct access. The compiler handles the '->' logic implicitly.
-    obj.position.x = obj.position.x + dx;
-    obj.position.y = obj.position.y + dy;
+// This function accepts a pointer to a Point
+void move_point(ptr Point target, int dx) {
+    // No need to write 'deref(target).x' or 'target->x'
+    target.x = target.x + dx;
 }
 ```
 
-// TODO: When declaring the structure at the end, you probably need to add ‘;’. Although, on the other hand, without the semicolon, everything looks much cleaner.
+// TODO: When declaring the structure at the end, you probably need to add ‘`;`’. Although, on the other hand, without the semicolon, everything looks much cleaner.
