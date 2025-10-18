@@ -9,26 +9,45 @@ The system is based on a simple analogy:
 - **Variables ("Keys")**: Variables that point to objects in memory are "keys". They do not own the data but merely provide access to it.
 
 ## Core Principles
-### 1. Object Creation and Destruction
-The programmer has full control over when to create and destroy objects in dynamic memory (the heap).
+### Object Lifecycle
 
-- **Creation (`new`)**: The new operator (syntax to be defined) instructs the "Warden" to allocate memory for a new object. The "Warden" creates the object and issues the first "key" to the programmer.
+The programmer has full control over when to create and destroy objects in dynamic memory (the heap). This process is tightly integrated with class constructors and destructors.
 
-- **Destruction (`free`)**: The free operator instructs the "Warden" to destroy the object and invalidate all keys associated with it.
+#### Creation (`new`)
+
+The `new` operator commands the "Warden" to allocate memory for a new object and initialize it.
+
+The process is as follows:
+1. The "Warden" allocates the necessary amount of memory. 
+2. The class's static constructor method (by convention, `::new()`) is called to initialize this memory. 
+3. The "Warden" registers the new object and issues the first "key" (a pointer) to the programmer.
 
 ```Ignis
 
 // Syntax is hypothetical
-// 1. The "Warden" creates a Point object and gives us the key `p1`.
-mut Point p1 = new Point;
+// 1. The "Warden" allocates memory and calls Player::new().
+// 2. We are issued the "owner key" `p1`.
+mut ptr Player p1 = new Player('P');
+```
 
-// ... work with the object ...
+#### Destruction (free)
 
-// 2. We command the "Warden" to destroy the object.
+The `free` operator commands the "Warden" to properly destroy the object and invalidate all keys associated with it.
+
+The destruction process:
+1. The object's destructor (e.g., the dunder method `__del__`) is called. 
+   This allows the object to release any resources it owns (like closing files or calling `free` on internal objects). 
+2. The "Warden" invalidates **all keys** that reference this object. 
+3. The "Warden" frees the memory that the object occupied.
+
+```Ignis
+
+// We command the "Warden" to start the destruction process.
 free(p1);
 ```
 
-Important: If free is not called, the memory will remain occupied until the end of the program. This can lead to memory leaks.
+**Important**: If `free` is not called, the object and the memory it occupies will remain until the end of the program. 
+This can lead to **memory leaks**.
 
 ### 2. Variables as "Keys"
 Assigning variables that point to heap objects does not copy the object. Instead, it creates a new "key" (a reference) to the very same object.

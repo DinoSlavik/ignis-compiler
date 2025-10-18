@@ -38,6 +38,40 @@ int check_score(int score) {
 }
 ```
 
+## Function Overloading
+
+Ignis allows defining multiple functions with the same name but different parameters. This mechanism is called **overloading**. A unique feature of the language is that overloading is possible not only by argument types but also by their **names**.
+
+This allows for the creation of APIs that are more semantically expressive and readable.
+
+```Ignis
+
+// Two versions of a function to set a position
+// The first accepts Cartesian coordinates
+set_position(int x, int y) { ... }
+
+// The second, with the same types but different names, accepts polar coordinates
+set_position(int r, int phi) { ... }
+```
+
+### Resolving Ambiguity
+
+If the compiler can choose a function version based on types alone, it will do so automatically. However, if an ambiguity exists (as in the example above, where both functions accept `int`, `int`), the compiler will require the programmer to explicitly specify the argument names in the call.
+
+```Ignis
+
+mut Point my_point;
+
+// Ambiguous call - Compile-time error!
+// my_point.set_position(10, 20);
+
+// Explicit call with named arguments - All good
+my_point.set_position(x: 10, y: 20);
+my_point.set_position(r: 5, phi: 90);
+```
+
+For library authors, a `default` **property** is planned, which will allow marking one of the ambiguous versions as the default to avoid breaking user code when new overloads are added.
+
 ## Expression Blocks
 Any block of code enclosed in curly braces `{}` can be used as an expression. Such a block executes all statements within it, and its result is the value of the last expression in the block (the one not followed by a semicolon).
 

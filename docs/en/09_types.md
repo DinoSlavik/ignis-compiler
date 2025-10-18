@@ -61,6 +61,12 @@ including standard (`64`, `32`, `16`, `8`, `4`, `2`) and non-standard (`24`, `48
 ## The 'string' Type
 Is considered an independent, "base" type for working with text.
 
+## Creating User-Defined Types
+In addition to built-in types, Ignis provides two keywords for defining your own composite data types: `struct` and `class`.
+
+- `struct` **(Structure)**: Used to create **value types**, whose main purpose is to aggregate data fields.
+- `class` **(Class)**: Used to create **reference types**, which allow for the encapsulation of both data (fields) and behavior (methods).
+
 ## (DEV) Handling Absence of Value: Errors as Types
 In Ignis (planned for phase 3), there will be no `null` or `None`. The absence of a value will be handled through an **error-as-types system**:
 - **Errors are types**: There will be a base `Error` type from which categories (`MathError`, `IOError`) and specific errors will inherit.

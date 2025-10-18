@@ -23,8 +23,8 @@ When using the assembly code generator (temporarily unavailable):
 ## 2. Installation and Running compiler
 To get started, download the repository from GitHub. The compiler script is located at `ignis/main.py` within the downloaded repository.
 
-## 3. Your First Program: Hello, World!
-Create a file named `hello.ign` and add the following code to it:
+## 3. Your First Program: 1337 (leet)
+Create a file named `leet.ign` and add the following code to it:
 
 ```Ignis
 
@@ -39,11 +39,11 @@ Now, let's compile our file. Open a terminal in the project's root directory and
 
 ```Bash
 
-python3 ignis/main.py hello.ign -o hello
+python3 ignis/main.py leet.ign -o leet
 ```
 This command will:
 
-Compile the `hello.ign` file.
+Compile the `leet.ign` file.
 
 Create an executable file named hello in the current directory.
 
@@ -51,7 +51,7 @@ After a successful compilation, run your program:
 
 ```Bash
 
-./hello
+./leet
 ```
 You should see the following output in your terminal:
 
@@ -72,5 +72,5 @@ You can specify the target using the `--target` flag:
 ```Bash
 
 # Compile via C++
-python3 ignis/main.py hello.ign --target cpp -o hello_cpp
+python3 ignis/main.py leet.ign --target cpp -o leet_cpp
 ```

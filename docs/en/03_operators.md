@@ -17,9 +17,9 @@ int result = 20 * 10; // result = 200
 int result = 20 / 10; // result = 2
 ```
 
-_Note: The behavior of division by zero (`0`) is currently undefined and may result in a runtime error._
+_Note: The behavior of division by zero (0) is currently undefined and may result in a runtime error._
 
-// TODO: Define the behavior for division by zero. Should it cause a panic, or return 0? inf, when added, will likely be available for all types that support it, including -inf for types that support negative values.
+// TODO: Define the behavior for division by `zero`. Since `inf` will likely be available for every type that supports it (including `-inf` for types that support negative values), the result could be `inf`.
 
 ## Comparison Operators
 Used to compare two values. The result is `1` (true) or `0` (false).
@@ -68,7 +68,9 @@ print(nnot 0);   // Prints 0
 print(1 xnor 1); // Prints 1
 ```
 
-_Note: nnot was initially a joke, but has been repurposed into a useful feature for casting any value to a strict boolean (`1` or `0`)._
+_Note: `nnot` was initially a joke, but has been repurposed into a useful feature for casting any value to a strict boolean (`1` or `0`)._
+
+//TODO: `nnot` should accept any number as input (like all other logical operators), but should only output `0` or `1`, effectively acting as a converter to binary logic.
 
 ## Bitwise Operators
 These operators perform manipulations at the level of individual bits of a number.
@@ -99,11 +101,11 @@ print(nbnot 3);   // Prints 3 (0011)
 print(5 nbxor 3); // Prints 9 (1001)
 ```
 
-_Note: nbnot is the bitwise analogue to nnot, with a similar history, but currently without happy end._
+_Note: `nbnot` is the bitwise analogue to `nnot`, with a similar history, but currently without happy end._
 
 ## Special Operators
 - `=` : Assignment.
-- `===` : Type Comparison. This is a compile-time operator that returns 1 if the types of the operands are identical, and 0 otherwise.
+- `===` : Type Comparison. This is a compile-time operator that returns `1` if the types of the operands are identical, and `0` otherwise.
 
 ```Ignis
 
@@ -117,6 +119,12 @@ char b = 'Q';
 print(b === a); // Prints 0
 ```
 
+## Operator Overloading
+
+For custom types, all operators can be overloaded. By default, only =, ===, and ==/!= (which compares memory addresses by principle) are implemented.
+
 // QUES: There's a nuance here. char is, de-facto, a special subtype of int. This raises a logical question: how should the === operator react to subtypes when compared with their parent types? Perhaps it performs a strict check, and we could add another operator, similar to Python's isinstance, which would check for type compatibility (i.e., is this type a subtype of another)? So, in this case, === would return 0 for 'char' === 'int', but a hypothetical is operator would return 1. This also brings up the question of how fair it is to design built-in types this way. For example, what would a string be, which is both a list and a list of char? Would it simultaneously be a list, a character, and an integer through this operator's logic? This needs to be decided. Also, the behavior of all these operators should be explicitly overridable, and I think I had some ideas on how to do that.
+
+// ANSV1: It seems likely that `===` will check for literal type identity ("are these types exactly the same?"), while a new operator, for example `ischild(child, parent)`, will recursively check for inheritance.
 
 // TODO: Create an operator precedence table.
