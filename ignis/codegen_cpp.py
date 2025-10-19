@@ -98,6 +98,7 @@ class CodeGeneratorCpp(NodeVisitor):
     def visit_Program(self, node: Program, writer: CppWriter):
         writer.add_line('#include "ignis_runtime.h"')
         writer.add_line('#include <cstdint>')
+        writer.add_line('#include <typeinfo>')
         writer.add_line('')
         for decl in node.declarations:
             if isinstance(decl, StructDef):
@@ -178,9 +179,37 @@ class CodeGeneratorCpp(NodeVisitor):
                 return "false"
         left_expr = self.visit_expr(node.left)
         right_expr = self.visit_expr(node.right)
-        op_map = {'or': '||', 'and': '&&', 'bor': '|', 'band': '&', 'bxor': '^'}
-        op = op_map.get(node.op.value, node.op.value)
-        return f"({left_expr} {op} {right_expr})"
+        op_type = node.op.type
+
+        op_map = {
+            TokenType.KW_OR: '||', TokenType.KW_AND: '&&',
+            TokenType.KW_BOR: '|', TokenType.KW_BAND: '&', TokenType.KW_BXOR: '^',
+
+            TokenType.EQUAL: '==', TokenType.NOT_EQUAL: '!=',
+            TokenType.LESS: '<', TokenType.LESS_EQUAL: '<=',
+            TokenType.GREATER: '>', TokenType.GREATER_EQUAL: '>=',
+
+            TokenType.PLUS: '+', TokenType.MINUS: '-', TokenType.MULTIPLY: '*', TokenType.DIVIDE: '/'
+        }
+
+        if op_type in op_map:
+            return f"({left_expr} {op_map[op_type]} {right_expr})"
+
+        # For some reason cpp doesn't support xor by default...
+        if op_type == TokenType.KW_XOR: return f"(!{left_expr} != !{right_expr})"
+        if op_type == TokenType.KW_XNOR: return f"(!{left_expr} == !{right_expr})"
+
+        if op_type == TokenType.KW_NAND: return f"(!({left_expr} && {right_expr}))"
+        if op_type == TokenType.KW_NOR:  return f"(!({left_expr} || {right_expr}))"
+
+        if op_type == TokenType.KW_NBAND: return f"(~({left_expr} & {right_expr}))"
+        if op_type == TokenType.KW_NBOR:  return f"(~({left_expr} | {right_expr}))"
+        if op_type == TokenType.KW_NBXOR: return f"(~({left_expr} ^ {right_expr}))"
+
+        # Using typeid() from typeinfo because cpp doesn't support dedicated type comparison operator
+        if op_type == TokenType.TYPE_EQUAL: return f"(typeid(left_expr) == typeid(right_expr))"
+
+        return f"/* Binary Operator '{op_type}' C++ generation not implemented */"
 
     def visit_MemberAccess(self, node: MemberAccess):
         left_expr_str = self.visit_expr(node.left)
@@ -314,11 +343,22 @@ class CodeGeneratorCpp(NodeVisitor):
 
     def visit_UnaryOp(self, node: UnaryOp):
         expr = self.visit_expr(node.expr)
-        op_map = {TokenType.KW_DEREF: '(*{expr})', TokenType.KW_ADDR: '(&{expr})',
-                  TokenType.KW_NOT: '(!{expr})', TokenType.KW_BNOT: '(~{expr})',
-                  TokenType.MINUS: '(-{expr})', TokenType.PLUS: '(+{expr})'}
-        if node.op.type in op_map:
+
+        op_type = node.op.type
+
+        op_map = {
+            TokenType.KW_DEREF: '(*{expr})', TokenType.KW_ADDR: '(&{expr})',
+            TokenType.KW_NOT: '(!{expr})', TokenType.KW_BNOT: '(~{expr})',
+            TokenType.MINUS: '(-{expr})', TokenType.PLUS: '(+{expr})'
+        }
+
+        if op_type in op_map:
             return op_map[node.op.type].format(expr=expr)
+
+        if op_type == TokenType.KW_NNOT: return f"(({expr}) != 0)"
+
+        if op_type == TokenType.KW_NBNOT: return f"({expr})"
+
         return f"/* UnaryOp {node.op.value} not implemented */"
 
     def visit_FunctionCall(self, node: FunctionCall):
