@@ -149,7 +149,7 @@ class CodeGeneratorCpp(NodeVisitor):
         self.symbol_table = old_symbol_table
 
     def visit_statement(self, node, writer):
-        if isinstance(node, (FunctionCall, Assign)):
+        if isinstance(node, (FunctionCall, Assign, Free)):
             expr_code = self.visit_expr(node)
             writer.add_line(f"{expr_code};")
         else:
@@ -165,6 +165,12 @@ class CodeGeneratorCpp(NodeVisitor):
         var_type = self._map_type(node.type_node, is_const=is_const_string and not is_mut)
         if node.assign_node:
             value_expr = self.visit_expr(node.assign_node)
+
+            if isinstance(node.assign_node, (Alloc, New)):
+                pointer_type_str = self._map_type(node.type_node).strip()
+                if isinstance(node.assign_node, Alloc):
+                    value_expr = f"reinterpret_cast<{pointer_type_str}>({value_expr})"
+
             writer.add_line(f"{var_type} {var_name} = {value_expr};")
         else:
             writer.add_line(f"{var_type} {var_name};")
@@ -268,6 +274,28 @@ class CodeGeneratorCpp(NodeVisitor):
 
     def visit_ContinueStmt(self, node: ContinueStmt, writer: CppWriter):
         writer.add_line("continue;")
+
+    def visit_Alloc(self, node: Alloc):
+        """Генерує виклик ignis_alloc(size)."""
+        size_code = self.visit_expr(node.size_expr)
+        return f"ignis_alloc({size_code})"
+
+    def visit_New(self, node: New):
+        """Генерує виділення пам'яті для нового об'єкта та приводить тип."""
+        # Отримуємо C++ назву типу (напр., "MyStruct")
+        cpp_type = self._map_type(node.type_node).strip()  # strip() для видалення зайвих пробілів
+
+        # Генеруємо фінальний рядок згідно з планом
+        # f"reinterpret_cast<{cpp_type}*> (ignis_alloc(sizeof({cpp_type})))"
+        return f"reinterpret_cast<{cpp_type}*>(ignis_alloc(sizeof({cpp_type})))"
+
+    def visit_Free(self, node: Free):
+        """Генерує виклик ignis_free(pointer)."""
+        # Free є інструкцією, тому ми не повертаємо рядок, а додаємо його до writer'а.
+        # Однак, щоб вписатись в існуючу архітектуру, де visit_statement
+        # очікує на рядок, ми повернемо його.
+        pointer_code = self.visit_expr(node.expr)
+        return f"ignis_free({pointer_code})"
 
     def visit_expr(self, node):
         if isinstance(node, IfExpr): return self.visit_IfExpr_expr(node)
