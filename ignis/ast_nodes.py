@@ -84,3 +84,12 @@ class Block(AST):
 class Return(AST):
     def __init__(self, value): self.value = value
     def __repr__(self): return f"    Return(value={self.value})"
+class Alloc(AST):
+    def __init__(self, size_expr): self.size_expr = size_expr
+    def __repr__(self): return f"Alloc(size={self.size_expr})"
+class New(AST):
+    def __init__(self, type_node): self.type_node = type_node
+    def __repr__(self): return f"New(type_node={self.type_node})"
+class Free(AST):
+    def __init__(self, expr): self.expr = expr
+    def __repr__(self): return f"Free(expr={self.expr})"
