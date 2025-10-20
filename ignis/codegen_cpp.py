@@ -352,6 +352,13 @@ class CodeGeneratorCpp(NodeVisitor):
     def visit_Assign(self, node: Assign):
         left_expr = self.visit_expr(node.left)
         right_expr = self.visit_expr(node.right)
+
+        if isinstance(node.right, (Alloc, New)):
+            left_type = self._get_node_type(node.left)
+            pointer_type_str = self._map_type(left_type).strip()
+
+            right_expr = f"reinterpret_cast<{pointer_type_str}>({right_expr})"
+
         return f"{left_expr} = {right_expr}"
 
     def visit_Num(self, node: Num):
