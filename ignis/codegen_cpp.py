@@ -371,8 +371,22 @@ class CodeGeneratorCpp(NodeVisitor):
 
     def visit_UnaryOp(self, node: UnaryOp):
         expr = self.visit_expr(node.expr)
-
         op_type = node.op.type
+
+        # Це дозволяє писати речі аля
+        #   deref my_struct.a = 10;
+        # Я ще не певен, наскільки такий синтаксис потрібно пробачати,
+        # враховуючи, що оригінально його не мало бути (`.` є "розумним" оператором).
+        # QUES: Тож це потрібно буде обдумати.
+        # ANSV1: Можливо це потрібно додати, однак також додати ворнінг,
+        # котрий казатиме, що такий код є надлишковим та небажаним.
+        # if op_type == TokenType.KW_DEREF:
+        #     # Якщо розіменовуємо доступ до поля (my_struct.a),
+        #     # то C++ оператор -> вже виконує розіменування.
+        #     # Додатковий * не потрібен.
+        #     if isinstance(node.expr, MemberAccess):
+        #         return expr
+        #     return f"(*{expr})"
 
         op_map = {
             TokenType.KW_DEREF: '(*{expr})', TokenType.KW_ADDR: '(&{expr})',
