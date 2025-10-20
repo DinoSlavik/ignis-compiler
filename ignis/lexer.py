@@ -43,7 +43,7 @@ class TokenType(Enum):
     KW_PTR = 'ptr'
     KW_ADDR = 'addr'
     KW_DEREF = 'deref'
-    KW_ALLOC = 'alloc'
+    #KW_ALLOC = 'alloc'
     KW_NEW = 'new'
     KW_FREE = 'free'
     KW_STRUCT = 'struct'
@@ -119,7 +119,7 @@ RESERVED_KEYWORDS = {
     'deref': TokenType.KW_DEREF,
 
     # Memory
-    'alloc': TokenType.KW_ALLOC,
+    #'alloc': TokenType.KW_ALLOC,
     'new': TokenType.KW_NEW,
     'free': TokenType.KW_FREE,
 
