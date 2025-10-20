@@ -133,14 +133,14 @@ class CodeGeneratorCpp(NodeVisitor):
 
         self.visit(node.body, writer, is_function_body=True, is_void=is_void_func)
 
-    def visit_Block(self, node: Block, writer: CppWriter, is_function_body=False, is_void=False):
+    def visit_Block(self, node: Block, writer: CppWriter, is_function_body=False, is_void=False, is_expr_context=False):
         old_symbol_table = self.symbol_table.copy()
         writer.enter_block()
         for child in node.children[:-1]:
             self.visit_statement(child, writer)
         if node.children:
             last_child = node.children[-1]
-            if is_function_body and not is_void and not isinstance(last_child, Return):
+            if (is_function_body or is_expr_context) and not is_void and not isinstance(last_child, Return):
                 expr_code = self.visit_expr(last_child)
                 writer.add_line(f"return {expr_code};")
             else:
@@ -149,7 +149,7 @@ class CodeGeneratorCpp(NodeVisitor):
         self.symbol_table = old_symbol_table
 
     def visit_statement(self, node, writer):
-        if isinstance(node, (FunctionCall, Assign, Free)):
+        if isinstance(node, (FunctionCall, Assign, Free, BinOp, UnaryOp, Var, Num, CharLiteral, StringLiteral)):
             expr_code = self.visit_expr(node)
             writer.add_line(f"{expr_code};")
         else:
@@ -175,7 +175,7 @@ class CodeGeneratorCpp(NodeVisitor):
         else:
             writer.add_line(f"{var_type} {var_name};")
 
-    def visit_BinOp(self, node: BinOp):
+    def visit_BinOp(self, node: BinOp, *args, **kwargs):
         if node.op.type == TokenType.TYPE_EQUAL:
             left_type = self._get_node_type(node.left)
             right_type = self._get_node_type(node.right)
@@ -302,30 +302,40 @@ class CodeGeneratorCpp(NodeVisitor):
         if isinstance(node, Block): return self.visit_Block_expr(node)
         return self.visit(node)
 
+    # def visit_IfExpr_expr(self, node: IfExpr):
+    #     writer = CppWriter()
+    #     writer.add_line("[&]{")
+    #     writer.indent_level += 1
+    #     condition = self.visit_expr(node.condition)
+    #     writer.add_line(f"if ({condition})")
+    #     writer.enter_block()
+    #     ret_val = self.visit_expr(node.if_block.children[0])
+    #     writer.add_line(f"return {ret_val};")
+    #     writer.exit_block()
+    #     if node.else_block:
+    #         writer.add_line("else")
+    #         if isinstance(node.else_block, IfExpr):
+    #             ret_val = self.visit_expr(node.else_block)
+    #             writer.enter_block()
+    #             writer.add_line(f"return {ret_val};")
+    #             writer.exit_block()
+    #         else:
+    #             writer.enter_block()
+    #             ret_val = self.visit_expr(node.else_block.children[0])
+    #             writer.add_line(f"return {ret_val};")
+    #             writer.exit_block()
+    #     writer.indent_level -= 1
+    #     writer.add_line("}()")
+    #     return writer.get_code()
+
     def visit_IfExpr_expr(self, node: IfExpr):
         writer = CppWriter()
-        writer.add_line("[&]{")
+        writer.add_line("([&]() {")
         writer.indent_level += 1
-        condition = self.visit_expr(node.condition)
-        writer.add_line(f"if ({condition})")
-        writer.enter_block()
-        ret_val = self.visit_expr(node.if_block.children[0])
-        writer.add_line(f"return {ret_val};")
-        writer.exit_block()
-        if node.else_block:
-            writer.add_line("else")
-            if isinstance(node.else_block, IfExpr):
-                ret_val = self.visit_expr(node.else_block)
-                writer.enter_block()
-                writer.add_line(f"return {ret_val};")
-                writer.exit_block()
-            else:
-                writer.enter_block()
-                ret_val = self.visit_expr(node.else_block.children[0])
-                writer.add_line(f"return {ret_val};")
-                writer.exit_block()
+        # Просто викликаємо стандартний візитор, але з прапорцем is_expr_context=True
+        self.visit_IfExpr(node, writer, is_expr_context=True)
         writer.indent_level -= 1
-        writer.add_line("}()")
+        writer.add_line("}())")
         return writer.get_code()
 
     def visit_Block_expr(self, node: Block):
@@ -341,13 +351,13 @@ class CodeGeneratorCpp(NodeVisitor):
         writer.add_line("}()")
         return writer.get_code()
 
-    def visit_IfExpr(self, node: IfExpr, writer: CppWriter):
+    def visit_IfExpr(self, node: IfExpr, writer: CppWriter, is_expr_context=False):
         condition = self.visit_expr(node.condition)
         writer.add_line(f"if ({condition})")
-        self.visit(node.if_block, writer)
+        self.visit(node.if_block, writer, is_expr_context=is_expr_context)
         if node.else_block:
             writer.add_line("else")
-            self.visit(node.else_block, writer)
+            self.visit(node.else_block, writer, is_expr_context=is_expr_context)
 
     def visit_Assign(self, node: Assign):
         left_expr = self.visit_expr(node.left)
