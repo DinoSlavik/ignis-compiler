@@ -43,6 +43,9 @@ class TokenType(Enum):
     KW_PTR = 'ptr'
     KW_ADDR = 'addr'
     KW_DEREF = 'deref'
+    #KW_ALLOC = 'alloc'
+    KW_NEW = 'new'
+    KW_FREE = 'free'
     KW_STRUCT = 'struct'
 
     # Logical and bitwise keywords
@@ -114,6 +117,11 @@ RESERVED_KEYWORDS = {
     'ptr': TokenType.KW_PTR,
     'addr': TokenType.KW_ADDR,
     'deref': TokenType.KW_DEREF,
+
+    # Memory
+    #'alloc': TokenType.KW_ALLOC,
+    'new': TokenType.KW_NEW,
+    'free': TokenType.KW_FREE,
 
     # Logical and bitwise
     'or': TokenType.KW_OR,
