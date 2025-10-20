@@ -1,4 +1,4 @@
-from lexer import TokenType
+from lexer import TokenType, Token
 from ast_nodes import *
 
 
@@ -297,6 +297,32 @@ class Parser:
                 node = self.assignment_statement(left_node=node)
         return node
 
+    # def block(self):
+    #     self.eat(TokenType.LBRACE)
+    #     nodes = []
+    #     while self.current_token.type != TokenType.RBRACE:
+    #         node = self.statement()
+    #         nodes.append(node)
+    #         # Якщо після інструкції йде ';', це звичайна інструкція
+    #         if self.current_token.type == TokenType.SEMICOLON:
+    #             self.eat(TokenType.SEMICOLON)
+    #             # Якщо одразу після ';' йде '}', це може бути порожня інструкція
+    #             if self.current_token.type == TokenType.RBRACE:
+    #                 break
+    #         # Якщо після інструкції одразу йде '}', це був вираз, що повертається
+    #         elif self.current_token.type == TokenType.RBRACE:
+    #             break
+    #         elif isinstance(node, (ForStmt, LoopStmt, WhileStmt)):
+    #             pass # ignoring semicolon, if after loop
+    #         # В іншому випадку, після інструкції має бути ';'
+    #         else:
+    #             self.reporter.error("PE001", "Expected ';' after statement", self.current_token)
+    #
+    #     self.eat(TokenType.RBRACE)
+    #     root = Block()
+    #     for node in nodes: root.children.append(node)
+    #     return root
+
     def block(self):
         self.eat(TokenType.LBRACE)
         nodes = []
@@ -312,8 +338,9 @@ class Parser:
             # Якщо після інструкції одразу йде '}', це був вираз, що повертається
             elif self.current_token.type == TokenType.RBRACE:
                 break
-            elif isinstance(node, (ForStmt, LoopStmt, WhileStmt)):
-                pass # ignoring semicolon, if after loop
+            # Керуючі конструкції не потребують ';' після себе.
+            elif isinstance(node, (ForStmt, LoopStmt, WhileStmt, IfExpr)):
+                pass  # ігноруємо крапку з комою
             # В іншому випадку, після інструкції має бути ';'
             else:
                 self.reporter.error("PE001", "Expected ';' after statement", self.current_token)
@@ -353,6 +380,53 @@ class Parser:
         self.eat(TokenType.RBRACE)
         return StructDef(name_token.value, fields)
 
+    # def declaration(self):
+    #     if self.current_token.type == TokenType.KW_CONST:
+    #         node = self.constant_declaration()
+    #         self.eat(TokenType.SEMICOLON)
+    #         return node
+    #     if self.current_token.type == TokenType.KW_STRUCT:
+    #         return self.struct_definition()
+    #
+    #     # Використовуємо "погляд наперед", щоб розрізнити декларацію функції та змінної
+    #     is_func_decl = False
+    #     i = 0
+    #     # Пропускаємо можливі 'ptr'
+    #     while self.lexer.text[self.lexer.pos + i:].startswith('ptr'): i += 4
+    #     # Пропускаємо пробіли
+    #     while self.lexer.text[self.lexer.pos + i].isspace(): i += 1
+    #     # Пропускаємо тип
+    #     while self.lexer.text[self.lexer.pos + i].isalnum(): i += 1
+    #     # Пропускаємо пробіли
+    #     while self.lexer.text[self.lexer.pos + i].isspace(): i += 1
+    #     # Пропускаємо ім'я
+    #     while self.lexer.text[self.lexer.pos + i].isalnum(): i += 1
+    #     # Пропускаємо пробіли
+    #     while self.lexer.text[self.lexer.pos + i].isspace(): i += 1
+    #     # Якщо наступний символ '(', це функція
+    #     if self.lexer.text[self.lexer.pos + i] == '(':
+    #         is_func_decl = True
+    #
+    #     # Костиль, який перевіряє, чи не є це функцією без типу повернення
+    #     if self.current_token.type == TokenType.IDENTIFIER and self.peek_token.type == TokenType.LPAREN:
+    #         is_func_decl = True
+    #
+    #     if is_func_decl:
+    #         type_node = None
+    #         if self.current_token.type != TokenType.IDENTIFIER or self.peek_token.type != TokenType.LPAREN:
+    #             type_node = self.type_spec()
+    #         func_name = self.current_token.value
+    #         self.eat(TokenType.IDENTIFIER)
+    #         self.eat(TokenType.LPAREN)
+    #         params = self.parameter_list()
+    #         self.eat(TokenType.RPAREN)
+    #         body = self.block()
+    #         return FunctionDecl(type_node, func_name, params, body)
+    #     else:
+    #         node = self.variable_declaration()
+    #         self.eat(TokenType.SEMICOLON)
+    #         return node
+
     def declaration(self):
         if self.current_token.type == TokenType.KW_CONST:
             node = self.constant_declaration()
@@ -361,33 +435,16 @@ class Parser:
         if self.current_token.type == TokenType.KW_STRUCT:
             return self.struct_definition()
 
-        # Використовуємо "погляд наперед", щоб розрізнити декларацію функції та змінної
-        is_func_decl = False
-        i = 0
-        # Пропускаємо можливі 'ptr'
-        while self.lexer.text[self.lexer.pos + i:].startswith('ptr'): i += 4
-        # Пропускаємо пробіли
-        while self.lexer.text[self.lexer.pos + i].isspace(): i += 1
-        # Пропускаємо тип
-        while self.lexer.text[self.lexer.pos + i].isalnum(): i += 1
-        # Пропускаємо пробіли
-        while self.lexer.text[self.lexer.pos + i].isspace(): i += 1
-        # Пропускаємо ім'я
-        while self.lexer.text[self.lexer.pos + i].isalnum(): i += 1
-        # Пропускаємо пробіли
-        while self.lexer.text[self.lexer.pos + i].isspace(): i += 1
-        # Якщо наступний символ '(', це функція
-        if self.lexer.text[self.lexer.pos + i] == '(':
-            is_func_decl = True
+        # ### MODIFIED ###: Нова, більш надійна логіка розрізнення функцій та змінних.
+        # Ми не можемо заглядати в текст, тому що це ненадійно.
+        # Замість цього ми спробуємо розпарсити потенційну функцію,
+        # і якщо не вийде - відкотимось. Але оскільки відкочуватись складно,
+        # ми просто будемо дивитись на токени.
 
-        # Костиль, який перевіряє, чи не є це функцією без типу повернення
+        # Костиль, який перевіряє, чи не є це функцією без типу повернення (напр. main())
         if self.current_token.type == TokenType.IDENTIFIER and self.peek_token.type == TokenType.LPAREN:
-            is_func_decl = True
-
-        if is_func_decl:
+            # Це точно функція без типу повернення
             type_node = None
-            if self.current_token.type != TokenType.IDENTIFIER or self.peek_token.type != TokenType.LPAREN:
-                type_node = self.type_spec()
             func_name = self.current_token.value
             self.eat(TokenType.IDENTIFIER)
             self.eat(TokenType.LPAREN)
@@ -395,10 +452,32 @@ class Parser:
             self.eat(TokenType.RPAREN)
             body = self.block()
             return FunctionDecl(type_node, func_name, params, body)
+
+        # Всі інші випадки починаються з типу.
+        type_node = self.type_spec()
+        func_name = self.current_token.value
+        self.eat(TokenType.IDENTIFIER)
+
+        if self.current_token.type == TokenType.LPAREN:
+            # Це функція з типом повернення
+            self.eat(TokenType.LPAREN)
+            params = self.parameter_list()
+            self.eat(TokenType.RPAREN)
+            body = self.block()
+            return FunctionDecl(type_node, func_name, params, body)
         else:
-            node = self.variable_declaration()
+            # Це глобальна змінна. Ми вже "з'їли" її тип та ім'я.
+            # Тепер нам потрібно відтворити вузол VarDecl, який зазвичай створює variable_declaration
+            var_node = Var(Token(TokenType.IDENTIFIER, func_name))  # Створюємо токен "заднім числом"
+            assign_node = None
+            if self.current_token.type == TokenType.ASSIGN:
+                self.eat(TokenType.ASSIGN)
+                assign_node = self.expr()
+
+            # is_mutable для глобальних змінних поки не підтримується, тому False
+            var_decl = VarDecl(type_node, var_node, assign_node, is_mutable=False)
             self.eat(TokenType.SEMICOLON)
-            return node
+            return var_decl
 
     def parse(self):
         declarations = []
