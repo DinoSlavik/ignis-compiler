@@ -2,6 +2,7 @@
 #define IGNIS_RUNTIME_H
 
 #include <cstdint> // Підключаємо, щоб мати доступ до типу int64_t
+#include <cstddef>
 
 /*
  * Оголошення вбудованих функцій мови Ignis,
@@ -17,5 +18,8 @@ void ignis_putchar(char value);
 // Функція для читання одного символу з вводу.
 char ignis_getchar();
 
+// Функції для керування пам'яттю
+void* ignis_alloc(size_t size);
+void ignis_free(void* ptr);
 
 #endif //IGNIS_RUNTIME_H
