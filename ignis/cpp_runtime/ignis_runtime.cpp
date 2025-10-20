@@ -7,7 +7,7 @@
  * @param value Число, яке потрібно вивести.
  */
 void print_int(int64_t value) {
-    std::cout << value << std::endl;
+    std::cout << value;// << std::endl;
 }
 
 /**
