@@ -51,10 +51,20 @@ class Parser:
             return self.block()
         elif token.type == TokenType.KW_IF:
             return self.if_expression()
+        elif token.type == TokenType.KW_NEW:
+            self.eat(TokenType.KW_NEW)
+            type_node = self.type_spec()
+            return New(type_node)
 
         node = None
         if token.type == TokenType.IDENTIFIER:
-            if self.peek_token.type == TokenType.LPAREN:
+            if token.value == 'alloc' and self.peek_token.type == TokenType.LPAREN:
+                self.eat(TokenType.IDENTIFIER)
+                self.eat(TokenType.LPAREN)
+                size_expr = self.expr()
+                self.eat(TokenType.RPAREN)
+                return Alloc(size_expr)
+            elif self.peek_token.type == TokenType.LPAREN:
                 node = self.function_call()
             else:
                 self.eat(TokenType.IDENTIFIER)
@@ -256,11 +266,18 @@ class Parser:
 
     def statement(self):
         token_type = self.current_token.type
-        if token_type in (TokenType.KW_IF, TokenType.KW_WHILE, TokenType.KW_LOOP, TokenType.KW_FOR):
-            if token_type == TokenType.KW_IF: return self.if_expression()
-            if token_type == TokenType.KW_WHILE: return self.while_statement()
-            if token_type == TokenType.KW_LOOP: return self.loop_statement()
-            if token_type == TokenType.KW_FOR: return self.for_statement()
+        if token_type == TokenType.KW_IF: return self.if_expression()
+        if token_type == TokenType.KW_WHILE: return self.while_statement()
+        if token_type == TokenType.KW_LOOP: return self.loop_statement()
+        if token_type == TokenType.KW_FOR: return self.for_statement()
+
+        if token_type == TokenType.KW_FREE:
+            self.eat(TokenType.KW_FREE)
+            self.eat(TokenType.LPAREN)
+            expr_node = self.expr()
+            self.eat(TokenType.RPAREN)
+            return Free(expr_node)
+
         node = None
         is_var_decl = (token_type in (TokenType.KW_INT, TokenType.KW_CHAR, TokenType.KW_MUT, TokenType.KW_PTR) or
                        (token_type == TokenType.IDENTIFIER and self.peek_token.type == TokenType.IDENTIFIER))
