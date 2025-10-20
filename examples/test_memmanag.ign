@@ -1,0 +1,28 @@
+struct TestStruct {
+    int a;
+    int b;
+}
+
+int main() {
+    // 1. Тест 'new' та 'free'
+    mut ptr TestStruct my_struct = new TestStruct;
+
+    // 2. Запис та читання через вказівник
+    my_struct.a = 100;
+    my_struct.b = 200;
+    print(my_struct.a + my_struct.b); // Expected: 300
+
+    free(my_struct);
+
+    // 3. Тест 'alloc'
+    // Виділяємо пам'ять під 10 цілих чисел
+    mut ptr int my_array = alloc(10 * 8); // 8 байт на int
+
+    // Записуємо та читаємо 5-й елемент
+    deref (my_array + 4) = 1337;
+    print(deref (my_array + 4)); // Expected: 1337
+
+    free(my_array);
+
+    return 0;
+}
