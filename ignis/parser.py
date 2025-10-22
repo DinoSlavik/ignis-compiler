@@ -354,6 +354,7 @@ class Parser:
             self.eat(TokenType.SEMICOLON)
             fields.append(Field(type_node, var_node))
         self.eat(TokenType.RBRACE)
+        self.eat(TokenType.SEMICOLON)
         return StructDef(name_token.value, fields)
 
     def declaration(self):
