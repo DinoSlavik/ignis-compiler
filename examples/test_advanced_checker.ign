@@ -1,0 +1,20 @@
+// ### TEST FOR STEP 2 (ERRORS) ###
+// Мета: Перевірити, що чекер знаходить семантичні помилки,
+// пов'язані з оголошенням структур.
+// Цей файл НЕ ПОВИНЕН компілюватися.
+
+// Помилка SE001: Повторне оголошення структури
+struct Point { int x; };
+struct Point { int y; }; // ERROR: Struct 'Point' is already defined.
+
+// Помилка SE002: Повторне оголошення поля в структурі
+struct Transform {
+    int scale;
+    int position;
+    int position; // ERROR: Duplicate field 'position' in struct 'Transform'.
+};
+
+
+int main() {
+    return 0;
+}

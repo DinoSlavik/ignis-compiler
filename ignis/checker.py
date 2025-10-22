@@ -75,6 +75,9 @@ class Checker(NodeVisitor):
         return None
 
     def check(self, tree):
+        self.symbol_table = SymbolTable()
+        self.struct_info = {}
+        self.current_function_return_type = None
         self.visit(tree)
 
     def _has_break(self, node):
@@ -103,7 +106,8 @@ class Checker(NodeVisitor):
         if struct_name in self.struct_info:
             # ### MODIFIED ###: Передаємо 'node.name_token' замість усього вузла, це більш точно.
             self.reporter.error(
-                "SE001", f"Struct '{struct_name}' is already defined.",
+                "SE001",
+                f"Struct '{struct_name}' is already defined.",
                 node.name_token
             )
             return
@@ -116,7 +120,8 @@ class Checker(NodeVisitor):
             field_name = field.var_node.value
             if field_name in fields:
                 self.reporter.error(
-                    "SE002", f"Duplicate field '{field_name}' in struct '{struct_name}'.",
+                    "SE002",
+                    f"Duplicate field '{field_name}' in struct '{struct_name}'.",
                     self._get_token_from_node(field.var_node)
                 )
             else:
