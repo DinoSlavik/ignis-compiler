@@ -102,8 +102,8 @@ class CodeGeneratorCpp(NodeVisitor):
         writer.add_line('')
         for decl in node.declarations:
             if isinstance(decl, StructDef):
-                self.struct_info[decl.name] = {field.var_node.value: field.type_node for field in decl.fields}
-                writer.add_line(f"struct {decl.name};")
+                self.struct_info[decl.name_token.value] = {field.var_node.value: field.type_node for field in decl.fields}
+                writer.add_line(f"struct {decl.name_token.value};")
         writer.add_line('')
         for decl in node.declarations:
             self.visit(decl, writer)
@@ -230,7 +230,7 @@ class CodeGeneratorCpp(NodeVisitor):
         writer.add_line(f"constexpr {var_type} {var_name} = {value_expr};")
 
     def visit_StructDef(self, node: StructDef, writer: CppWriter):
-        writer.add_line(f"struct {node.name}")
+        writer.add_line(f"struct {node.name_token.value}")
         writer.enter_block()
         for field in node.fields:
             field_type = self._map_type(field.type_node)

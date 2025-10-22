@@ -63,13 +63,13 @@ class Checker(NodeVisitor):
         self.struct_info = {}
 
     def _get_token_from_node(self, node):
+        if isinstance(node, StructDef): return node.name_token
         if hasattr(node, 'token'): return node.token
         if hasattr(node, 'op'): return node.op
         if hasattr(node, 'name_node'): return node.name_node.token
         if hasattr(node, 'var_node'): return node.var_node.token
         if isinstance(node, MemberAccess): return self._get_token_from_node(node.left)
         if isinstance(node, LoopStmt):
-            # Try to get a token from the body for better location
             if node.body and node.body.children:
                 return self._get_token_from_node(node.body.children[0])
         return None
@@ -99,11 +99,12 @@ class Checker(NodeVisitor):
                 self.visit(decl)
 
     def visit_StructDef(self, node: StructDef):
-        struct_name = node.name
+        struct_name = node.name_token.value
         if struct_name in self.struct_info:
+            # ### MODIFIED ###: Передаємо 'node.name_token' замість усього вузла, це більш точно.
             self.reporter.error(
                 "SE001", f"Struct '{struct_name}' is already defined.",
-                self._get_token_from_node(node)
+                node.name_token
             )
             return
 
