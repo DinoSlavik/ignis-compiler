@@ -78,7 +78,8 @@ def main():
         except subprocess.CalledProcessError as e:
             # Якщо компіляція або запуск провалились
             print(f"\n{RED}!!! Помилка на файлі: {ign_file} !!!{RESET}")
-            if "Компілюємо" in e.args[0]:  # Heuristic to check if it was compile time
+            #if "Компілюємо" in e.args[0]:  # Heuristic to check if it was compile time
+            if 1 == e.args[0]:  # Heuristic to check if it was compile time
                 print(f"{RED}Етап: Компіляція{RESET}")
             else:
                 print(f"{RED}Етап: Виконання{RESET}")
