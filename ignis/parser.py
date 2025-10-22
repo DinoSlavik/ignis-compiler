@@ -79,12 +79,14 @@ class Parser:
             node = MemberAccess(left=node, right=field_node)
         return node
 
-    # ... (методи від unary_expr до expr без змін)
     def unary_expr(self):
         token = self.current_token
-        UNARY_OPS = (TokenType.PLUS, TokenType.MINUS, TokenType.KW_NOT, TokenType.KW_BNOT, TokenType.KW_NNOT,
-                     TokenType.KW_NBNOT, TokenType.KW_ADDR,
-                     TokenType.KW_DEREF)
+        UNARY_OPS = (
+            TokenType.PLUS, TokenType.MINUS,
+            TokenType.KW_NOT, TokenType.KW_BNOT,
+            TokenType.KW_NNOT, TokenType.KW_NBNOT,
+            TokenType.KW_ADDR, TokenType.KW_DEREF
+        )
         if token.type in UNARY_OPS:
             self.eat(token.type)
             return UnaryOp(op=token, expr=self.unary_expr())
@@ -297,32 +299,6 @@ class Parser:
                 node = self.assignment_statement(left_node=node)
         return node
 
-    # def block(self):
-    #     self.eat(TokenType.LBRACE)
-    #     nodes = []
-    #     while self.current_token.type != TokenType.RBRACE:
-    #         node = self.statement()
-    #         nodes.append(node)
-    #         # Якщо після інструкції йде ';', це звичайна інструкція
-    #         if self.current_token.type == TokenType.SEMICOLON:
-    #             self.eat(TokenType.SEMICOLON)
-    #             # Якщо одразу після ';' йде '}', це може бути порожня інструкція
-    #             if self.current_token.type == TokenType.RBRACE:
-    #                 break
-    #         # Якщо після інструкції одразу йде '}', це був вираз, що повертається
-    #         elif self.current_token.type == TokenType.RBRACE:
-    #             break
-    #         elif isinstance(node, (ForStmt, LoopStmt, WhileStmt)):
-    #             pass # ignoring semicolon, if after loop
-    #         # В іншому випадку, після інструкції має бути ';'
-    #         else:
-    #             self.reporter.error("PE001", "Expected ';' after statement", self.current_token)
-    #
-    #     self.eat(TokenType.RBRACE)
-    #     root = Block()
-    #     for node in nodes: root.children.append(node)
-    #     return root
-
     def block(self):
         self.eat(TokenType.LBRACE)
         nodes = []
@@ -380,53 +356,6 @@ class Parser:
         self.eat(TokenType.RBRACE)
         return StructDef(name_token.value, fields)
 
-    # def declaration(self):
-    #     if self.current_token.type == TokenType.KW_CONST:
-    #         node = self.constant_declaration()
-    #         self.eat(TokenType.SEMICOLON)
-    #         return node
-    #     if self.current_token.type == TokenType.KW_STRUCT:
-    #         return self.struct_definition()
-    #
-    #     # Використовуємо "погляд наперед", щоб розрізнити декларацію функції та змінної
-    #     is_func_decl = False
-    #     i = 0
-    #     # Пропускаємо можливі 'ptr'
-    #     while self.lexer.text[self.lexer.pos + i:].startswith('ptr'): i += 4
-    #     # Пропускаємо пробіли
-    #     while self.lexer.text[self.lexer.pos + i].isspace(): i += 1
-    #     # Пропускаємо тип
-    #     while self.lexer.text[self.lexer.pos + i].isalnum(): i += 1
-    #     # Пропускаємо пробіли
-    #     while self.lexer.text[self.lexer.pos + i].isspace(): i += 1
-    #     # Пропускаємо ім'я
-    #     while self.lexer.text[self.lexer.pos + i].isalnum(): i += 1
-    #     # Пропускаємо пробіли
-    #     while self.lexer.text[self.lexer.pos + i].isspace(): i += 1
-    #     # Якщо наступний символ '(', це функція
-    #     if self.lexer.text[self.lexer.pos + i] == '(':
-    #         is_func_decl = True
-    #
-    #     # Костиль, який перевіряє, чи не є це функцією без типу повернення
-    #     if self.current_token.type == TokenType.IDENTIFIER and self.peek_token.type == TokenType.LPAREN:
-    #         is_func_decl = True
-    #
-    #     if is_func_decl:
-    #         type_node = None
-    #         if self.current_token.type != TokenType.IDENTIFIER or self.peek_token.type != TokenType.LPAREN:
-    #             type_node = self.type_spec()
-    #         func_name = self.current_token.value
-    #         self.eat(TokenType.IDENTIFIER)
-    #         self.eat(TokenType.LPAREN)
-    #         params = self.parameter_list()
-    #         self.eat(TokenType.RPAREN)
-    #         body = self.block()
-    #         return FunctionDecl(type_node, func_name, params, body)
-    #     else:
-    #         node = self.variable_declaration()
-    #         self.eat(TokenType.SEMICOLON)
-    #         return node
-
     def declaration(self):
         if self.current_token.type == TokenType.KW_CONST:
             node = self.constant_declaration()
@@ -435,13 +364,7 @@ class Parser:
         if self.current_token.type == TokenType.KW_STRUCT:
             return self.struct_definition()
 
-        # ### MODIFIED ###: Нова, більш надійна логіка розрізнення функцій та змінних.
-        # Ми не можемо заглядати в текст, тому що це ненадійно.
-        # Замість цього ми спробуємо розпарсити потенційну функцію,
-        # і якщо не вийде - відкотимось. Але оскільки відкочуватись складно,
-        # ми просто будемо дивитись на токени.
-
-        # Костиль, який перевіряє, чи не є це функцією без типу повернення (напр. main())
+        # Костиль, який перевіряє, чи не є це функцією без типу повернення
         if self.current_token.type == TokenType.IDENTIFIER and self.peek_token.type == TokenType.LPAREN:
             # Це точно функція без типу повернення
             type_node = None
