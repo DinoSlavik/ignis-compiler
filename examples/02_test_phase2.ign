@@ -25,13 +25,13 @@ struct GameObject {
 
 // Перевірка логічних та побітових операторів
 int test_operators(int a, int b) {
-    print(a and b); // 1
-    print(a or 0);  // 1
-    print(a xor b); // 0 (1 xor 1)
+    print(a and b); putchar('\n'); // 1
+    print(a or 0); putchar('\n'); // 1
+    print(a xor b); putchar('\n'); // 0 (1 xor 1)
 
     // 5 (0101) band 12 (1100) = 4 (0100)
     int bitwise_res = 5 band 12;
-    print(bitwise_res); // 4
+    print(bitwise_res); putchar('\n'); // 4
 
     return (a === b); // Повинно повернути 1, бо обидва int
 }
@@ -44,15 +44,15 @@ void move_game_object(ptr GameObject obj, int dx, int dy) {
 }
 
 int main() {
-    print(123456789); // Test print
+    print(123456789); putchar('\n'); // Test print
     putchar('\n');
 
     // 1. Тест констант, змінних та операторів
     mut int score = 100;
     score = score - WORLD_VERSION; // 100 - 42 = 58
-    print(score);
+    print(score); putchar('\n');
     putchar('\n');
-    print(test_operators(1, 1)); // Повинно вивести 1, 1, 0, 4, 1
+    print(test_operators(1, 1)); putchar('\n'); // Повинно вивести 1, 1, 0, 4, 1
     putchar('\n');
 
     // 2. Тест циклу for та expression-based if/elif/else
@@ -64,7 +64,7 @@ int main() {
         } else {
             1   // Odd
         };
-        print(category); // 99, 1, 2, 1, 2
+        print(category);  putchar(' '); // 99, 1, 2, 1, 2
     }
     putchar('\n');
 
@@ -77,10 +77,10 @@ int main() {
     player.position = addr player_pos;
     player.id = 'P';
 
-    print(player.position.x); // 10
+    print(player.position.x); putchar('\n'); // 10
     move_game_object(addr player, 5, -5);
-    print(player_pos.x); // 15
-    print(player_pos.y); // 15
+    print(player_pos.x); putchar('\n'); // 15
+    print(player_pos.y); putchar('\n'); // 15
     putchar('\n');
 
     // 4. Тест циклу loop та expression-based block
@@ -89,48 +89,55 @@ int main() {
         if (countdown == 0) { break; };
 
         int block_val = {
-            print(countdown); // 3, 2, 1
+            print(countdown); putchar(' '); putchar('\n'); // 3, 2, 1
             countdown = countdown - 1;
             countdown * 10 // Повертаємо значення
         };
-        print(block_val); // 20, 10, 0
+        print(block_val); putchar(' '); // 20, 10, 0
     }
     putchar('\n');
+    putchar('\n');
+
 
     /*
-    // ==========================================================
-    // == Майбутній тест для Фази 2: Керування пам'яттю        ==
-    // ==========================================================
-    // Цей код не буде працювати, доки не буде реалізовано
-    // динамічне виділення пам'яті та "Вахтер".
+    ==========================================================
+    == Майбутній тест для Фази 2: Керування пам'яттю        ==
+    ==========================================================
+    Цей код не буде працювати, доки не буде реалізовано
+    динамічне виділення пам'яті та "Вахтер".
+    */
 
     // 1. Створення об'єкта в купі
-    // ptr GameObject enemy = new GameObject;
+    ptr GameObject enemy = new GameObject;
 
     // 2. Ініціалізація полів
-    // deref enemy.id = 'E';
-    // deref enemy.position = new Vector2D;
-    // deref deref enemy.position.x = 100;
-    // deref deref enemy.position.y = 100;
+    enemy.id = 'E';
+    enemy.position = new Vector2D;
+    enemy.position.x = 100;
+    enemy.position.y = 100;
 
     // 3. Створення "гостьового ключа"
-    // ptr GameObject another_ref = enemy;
+    ptr GameObject another_ref = enemy;
 
     // 4. Використання
-    // move_game_object(enemy, 10, 10);
-    // print(deref deref another_ref.position.x); // Повинно вивести 110
+    move_game_object(enemy, 10, 10);
+    print(another_ref.position.x); putchar('\n'); // Повинно вивести 110
 
     // 5. Звільнення пам'яті
-    // free(deref enemy.position); // Звільняємо вкладений об'єкт
-    // free(enemy); // Звільняємо основний об'єкт
+    free(enemy.position); // Звільняємо вкладений об'єкт
+    free(enemy); // Звільняємо основний об'єкт
 
     // 6. Перевірка безпеки "Вахтера"
     // Спроба доступу через 'another_ref' повинна викликати помилку рантайму,
     // а не segmentation fault.
-    // print(deref another_ref.id); // Runtime Error: Attempt to access dangling pointer
-    */
+    //print(another_ref.id); putchar('\n'); // Runtime Error: Attempt to access dangling pointer
+    //putchar(another_ref.id); putchar('\n');
+    // "Вахтер" ще не реалізований і потужно пропускає цей нюансик.
+    // Що неприємно, цю гадость і C++ ігнорить, від чого воно загалом якусь рандомну фігню кидає.
+    // Також додав `putchar`, який прекрасно це показує, має виводити 'E', виводить дурню якусь.
 
-    print(1337);
+
+    print(1337); putchar('\n');
     putchar('\n');
 
     return 0;
