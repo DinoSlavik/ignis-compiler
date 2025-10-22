@@ -23,7 +23,7 @@ def compile_source(source_code, file_path, reporter, target):
     # 2.5. Checker
     checker = Checker(reporter)
     checker.check(ast)
-    if reporter.had_error: return None
+    # if reporter.had_error: return None
 
     # ### MODIFIED ###: Вибір кодогенератора
     # 3. Code Generation
@@ -92,7 +92,9 @@ def main():
 
         reporter = ErrorReporter(str(input_path), source_code.split('\n'))
         generated_code = compile_source(source_code, str(input_path), reporter, args.target)
-        if reporter.had_error: sys.exit(1)
+        if reporter.had_error:
+            print(f"\nCompilation failed due to previous errors.", file=sys.stderr)
+            sys.exit(1)
 
         with open(intermediate_file_path, 'w') as f:
             f.write(generated_code)

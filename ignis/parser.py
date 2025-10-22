@@ -294,8 +294,8 @@ class Parser:
         else:
             node = self.expr()
             if self.current_token.type == TokenType.ASSIGN:
-                if not isinstance(node, (Var, UnaryOp, MemberAccess)):
-                    self.reporter.error("PE010", "Invalid assignment target.", self._get_token_from_node(node))
+                # if not isinstance(node, (Var, UnaryOp, MemberAccess)):
+                #     self.reporter.error("PE010", "Invalid assignment target.", self._get_token_from_node(node))
                 node = self.assignment_statement(left_node=node)
         return node
 

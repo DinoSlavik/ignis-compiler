@@ -157,8 +157,6 @@ class CodeGeneratorCpp(NodeVisitor):
 
     def visit_VarDecl(self, node: VarDecl, writer: CppWriter):
         var_name = node.var_node.value
-        if var_name in self.symbol_table:
-            self.error("E008", f"Variable '{var_name}' is already declared in this scope.", node)
         self.symbol_table[var_name] = node.type_node
         is_const_string = isinstance(node.assign_node, StringLiteral)
         is_mut = node.is_mutable

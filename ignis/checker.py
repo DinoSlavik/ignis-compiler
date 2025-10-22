@@ -272,3 +272,113 @@ class Checker(NodeVisitor):
         self.symbol_table.enter_scope()
         self.generic_visit(node)
         self.symbol_table.exit_scope()
+
+    def visit_BinOp(self, node: BinOp):
+        # Рекурсивно перевіряємо ліву та праву частини
+        self.visit(node.left)
+        self.visit(node.right)
+
+        left_type = self._get_node_type(node.left)
+        right_type = self._get_node_type(node.right)
+        op = node.op.type
+
+        # Правила перевірки типів
+        # Для арифметичних операторів (+, -, *, /)
+        if op in (TokenType.PLUS, TokenType.MINUS, TokenType.MULTIPLY, TokenType.DIVIDE):
+            if repr(left_type) not in ('int', 'char') and repr(right_type) not in ('int', 'char'):
+                self.reporter.error(
+                    "SE010",
+                    f"Arithmetic operator '{node.op.value}' can only be applied to 'int' types, but got '{left_type}' and '{right_type}'.",
+                    node.op
+                )
+
+        # Для операторів порівняння (==, !=, <, >, <=, >=)
+        elif op in (
+                TokenType.EQUAL, TokenType.NOT_EQUAL,
+                TokenType.LESS, TokenType.GREATER,
+                TokenType.LESS_EQUAL, TokenType.GREATER_EQUAL
+        ):
+            if repr(left_type) != repr(right_type):
+                self.reporter.error(
+                    "SE011",
+                    f"Comparison operator '{node.op.value}' cannot be applied to different or non-numerical types: '{left_type}' and '{right_type}'.",
+                    node.op
+                )
+
+        # Для логічних операторів (and, or, xor та їх інвертовані) - операнди мають бути "булевими" (поки що int/char)
+        elif op in (
+                TokenType.KW_AND, TokenType.KW_OR, TokenType.KW_XOR,
+                TokenType.KW_NAND, TokenType.KW_NOR, TokenType.KW_XNOR
+        ):
+            if repr(left_type) not in ('int', 'char') or repr(right_type) not in ('int', 'char'):
+                self.reporter.error(
+                    "SE012-1",
+                    f"Logical operator '{node.op.value}' expects integer-like operands, but got '{left_type}' and '{right_type}'.",
+                    node.op
+                )
+        # Для побітових операторів (band, bor, bxor та їх інвертовані) — операнди мають бути числами
+        elif op in (
+                TokenType.KW_BAND, TokenType.KW_BOR, TokenType.KW_BXOR,
+                TokenType.KW_NBAND, TokenType.KW_NBOR, TokenType.KW_NBXOR
+        ):
+            if repr(left_type) not in ('int', 'char') or repr(right_type) not in ('int', 'char'):
+                self.reporter.error(
+                    "SE012-2",
+                    f"Bitwise operator '{node.op.value}' expects numerical-like operands, but got '{left_type}' and '{right_type}'.",
+                    node.op
+                )
+
+    def visit_UnaryOp(self, node: UnaryOp):
+        self.visit(node.expr)
+        expr_type = self._get_node_type(node.expr)
+        op = node.op.type
+
+        if op == TokenType.KW_NOT:
+            if repr(expr_type) not in ('int', 'char'):
+                self.reporter.error(
+                    "SE013-1",
+                    f"Logical NOT operator can only be applied to integer-like types, but got '{expr_type}'.",
+                    node.op
+                )
+        elif op == TokenType.KW_NNOT:
+            if repr(expr_type) not in ('int', 'char'):
+                self.reporter.error(
+                    "SE013-2",
+                    f"Logical NNOT operator can only be applied to integer-like types, but got '{expr_type}'.",
+                    node.op
+                )
+        elif op == TokenType.KW_BNOT:
+            if repr(expr_type) not in ('int', 'char'):
+                self.reporter.error(
+                    "SE013-3",
+                    f"Logical BNOT operator can only be applied to integer-like types, but got '{expr_type}'.",
+                    node.op
+                )
+        elif op == TokenType.KW_NBNOT:
+            if repr(expr_type) not in ('int', 'char'):
+                self.reporter.error(
+                    "SE013-4",
+                    f"Logical NBNOT operator can only be applied to integer-like types, but got '{expr_type}'.",
+                    node.op
+                )
+        elif op == TokenType.MINUS:
+            if repr(expr_type) != 'int':
+                self.reporter.error(
+                    "SE014",
+                    f"Unary minus can only be applied to 'int', but got '{expr_type}'.",
+                    node.op
+                )
+        elif op == TokenType.KW_DEREF:
+            if expr_type.pointer_level == 0:
+                self.reporter.error(
+                    "SE015",
+                    f"Cannot dereference a non-pointer type '{expr_type}'.",
+                    node.op
+                )
+        elif op == TokenType.KW_ADDR:
+            if not isinstance(node.expr, (Var, MemberAccess)):
+                self.reporter.error(
+                    "SE016",
+                    f"Address-of operator '&' can only be applied to variables or fields.",
+                    self._get_token_from_node(node.expr)
+                )
