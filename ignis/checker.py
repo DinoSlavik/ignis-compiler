@@ -61,6 +61,7 @@ class Checker(NodeVisitor):
         self.reporter = reporter
         self.symbol_table = SymbolTable()
         self.struct_info = {}
+        self.current_function_return_type = None
 
     def _get_token_from_node(self, node):
         if isinstance(node, StructDef): return node.name_token
@@ -73,6 +74,56 @@ class Checker(NodeVisitor):
             if node.body and node.body.children:
                 return self._get_token_from_node(node.body.children[0])
         return None
+
+    def _get_node_type(self, node):
+        if isinstance(node, Num):
+            return Type(Token(TokenType.KW_INT, 'int'))
+        if isinstance(node, CharLiteral):
+            return Type(Token(TokenType.KW_CHAR, 'char'))
+        if isinstance(node, StringLiteral):
+            # Рядковий літерал - це вказівник на char
+            return Type(Token(TokenType.KW_CHAR, 'char'), pointer_level=1)
+        if isinstance(node, Var):
+            symbol = self.symbol_table.lookup_symbol(node.value)
+            if not symbol:
+                self.reporter.error(
+                    "SE003",
+                    f"Variable '{node.value}' is not defined.",
+                    self._get_token_from_node(node)
+                )
+                return Type(Token(TokenType.KW_VOID, 'void'))  # Повертаємо "error" тип
+            return symbol['type']
+        # ### NEW ###: Визначення типу для доступу до поля структури.
+        if isinstance(node, MemberAccess):
+            struct_type = self._get_node_type(node.left)
+            is_ptr = struct_type.pointer_level > 0
+            # Якщо це вказівник, нам потрібен базовий тип, щоб знайти структуру
+            struct_name = struct_type.value
+            if struct_name not in self.struct_info:
+                self.reporter.error(
+                    "SE005",
+                    f"Type '{struct_name}' is not a struct or not defined.",
+                    self._get_token_from_node(node.left)
+                )
+                return Type(Token(TokenType.KW_VOID, 'void'))
+
+            field_name = node.right.value
+            if field_name not in self.struct_info[struct_name]['fields']:
+                self.reporter.error(
+                    "SE006",
+                    f"Struct '{struct_name}' has no field named '{field_name}'.",
+                    self._get_token_from_node(node.right)
+                )
+                return Type(Token(TokenType.KW_VOID, 'void'))
+            return self.struct_info[struct_name]['fields'][field_name]
+
+        # Заглушка для нереалізованих типів
+        self.reporter.error(
+            "SE999",
+            f"Cannot determine type for node {type(node).__name__}",
+            self._get_token_from_node(node)
+        )
+        return Type(Token(TokenType.KW_VOID, 'void'))
 
     def check(self, tree):
         self.symbol_table = SymbolTable()
@@ -129,6 +180,69 @@ class Checker(NodeVisitor):
 
         self.struct_info[struct_name] = {'fields': fields}
 
+    def visit_VarDecl(self, node: VarDecl):
+        var_name = node.var_node.value
+
+        # 1. Перевірка на повторне оголошення в поточній області видимості.
+        if not self.symbol_table.add_symbol(var_name, node.type_node, properties={'is_mutable': node.is_mutable}):
+            self.reporter.error(
+                "SE004",
+                f"Variable '{var_name}' is already declared in this scope.",
+                self._get_token_from_node(node.var_node)
+            )
+
+        # 2. Якщо є присвоєння, перевіряємо типи.
+        if node.assign_node:
+            declared_type = node.type_node
+            assigned_type = self._get_node_type(node.assign_node)
+
+            # Порівнюємо типи. repr(Type) дає нам рядок типу "int" або "ptr Point".
+            if repr(declared_type) != repr(assigned_type):
+                self.reporter.error(
+                    "SE007",
+                    f"Type mismatch: cannot assign type '{assigned_type}' to variable '{var_name}' of type '{declared_type}'.",
+                    self._get_token_from_node(node.assign_node)
+                )
+
+    # ### NEW ###: Логіка перевірки для оператора присвоєння.
+    def visit_Assign(self, node: Assign):
+        # 1. Перевірка, чи ліва частина є валідним l-value.
+        if not isinstance(node.left, (Var, MemberAccess, UnaryOp)):
+            self.reporter.error(
+                "SE008-1",
+                "Invalid target for assignment. Must be a variable, field, or dereferenced pointer.",
+                self._get_token_from_node(node.left)
+            )
+            return  # Подальші перевірки безглузді
+
+        if isinstance(node.left, UnaryOp) and node.left.op.type != TokenType.KW_DEREF:
+            self.reporter.error(
+                "SE008-2",
+                "Invalid target for assignment. Only dereference operation is a valid l-value.",
+                self._get_token_from_node(node.left)
+            )
+            return
+
+        # 2. Перевірка на присвоєння немутабельній змінній.
+        if isinstance(node.left, Var):
+            symbol = self.symbol_table.lookup_symbol(node.left.value)
+            if symbol and not symbol['properties'].get('is_mutable'):
+                self.reporter.error(
+                    "SE009",
+                    f"Cannot assign to immutable variable '{node.left.value}'.",
+                    self._get_token_from_node(node.left)
+                )
+
+        # 3. Перевірка типів.
+        left_type = self._get_node_type(node.left)
+        right_type = self._get_node_type(node.right)
+        if repr(left_type) != repr(right_type):
+            self.reporter.error(
+                "SE007",
+                f"Type mismatch: cannot assign type '{right_type}' to an expression of type '{left_type}'.",
+                self._get_token_from_node(node.right)
+            )
+
     def visit_Block(self, node):
         self.symbol_table.enter_scope()
         for child in node.children:
@@ -138,7 +252,8 @@ class Checker(NodeVisitor):
     def visit_LoopStmt(self, node):
         if not self._has_break(node.body):
             self.reporter.warning(
-                "W001", "'loop' statement has no 'break' and may run forever.",
+                "W001",
+                "'loop' statement has no 'break' and may run forever.",
                 self._get_token_from_node(node)
             )
         self.symbol_table.enter_scope()
@@ -150,7 +265,8 @@ class Checker(NodeVisitor):
         if is_constant_true:
             if not self._has_break(node.body):
                 self.reporter.warning(
-                    "W002", "'while' loop with a constant true condition has no 'break' and may run forever.",
+                    "W002",
+                    "'while' loop with a constant true condition has no 'break' and may run forever.",
                     self._get_token_from_node(node)
                 )
         self.symbol_table.enter_scope()
