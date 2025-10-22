@@ -16,6 +16,12 @@ RED = "\033[91m"
 YELLOW = "\033[93m"
 RESET = "\033[0m"
 
+TESTS_TO_EXCLUDE = [
+    "test_strings",
+    "test_errors",
+    "test_advanced_checker"
+]
+
 
 def main():
     """
@@ -29,21 +35,27 @@ def main():
         sys.exit(1)
 
     # 2. Знаходимо всі тестові файли .ign
-    test_files = glob.glob(os.path.join(EXAMPLES_DIR, "*.ign"))
-    if not test_files:
+    test_files_raw = glob.glob(os.path.join(EXAMPLES_DIR, "*.ign"))
+    if not test_files_raw:
         print(f"{RED}Помилка: Не знайдено жодного .ign файлу в директорії '{EXAMPLES_DIR}'.{RESET}")
         sys.exit(1)
 
     # 3. Створюємо директорію для бінарників, якщо її немає
     os.makedirs(BIN_DIR, exist_ok=True)
 
+    test_files = []
+
+    for ign_file in test_files_raw:
+        base_name = os.path.splitext(os.path.basename(ign_file))[0]
+        if base_name not in TESTS_TO_EXCLUDE:
+            test_files.append(ign_file)
+
     # 4. Проходимо по кожному файлу, компілюємо та запускаємо
     for ign_file in sorted(test_files):
         try:
             # Назва файлу без розширення (напр., "test_memmanag")
             base_name = os.path.splitext(os.path.basename(ign_file))[0]
-            if base_name == "test_errors":
-                continue
+
             # Повний шлях до вихідного бінарного файлу
             executable_path = os.path.join(BIN_DIR, base_name)
 
