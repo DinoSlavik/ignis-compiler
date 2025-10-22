@@ -14,10 +14,13 @@ int main() {
                 r
             }
             else {
-                1
+                // Was just `1` instead of what there is now
+                // TODO: fix this, please, it is stupid.
+                int ret1 = 1;
+                ret1
             };
         };
-        print(a);
+        print(a); putchar('\n');
         i = i + 1;
     }
 
