@@ -16,12 +16,12 @@ const int WORLD_VERSION = 42;
 struct Vector2D {
     int x;
     int y;
-}
+};
 
 struct GameObject {
     ptr Vector2D position;
     char id;
-}
+};
 
 // Перевірка логічних та побітових операторів
 int test_operators(int a, int b) {

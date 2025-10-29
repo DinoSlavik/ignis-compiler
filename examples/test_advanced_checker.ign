@@ -100,22 +100,22 @@ int main() {
     mut DummyStruct s_instance;
 
     // SE010: Арифметика над невідповідними типами
-    // int res = a + s_instance;
+    int res = a + s_instance;
 
     // SE011: Порівняння різних типів
-    // int cmp = (a == s_instance);
+    int cmp = (a == s_instance);
 
     // SE013: Логічне "НЕ" над структурою
-    // int logic = not s_instance;
+    int logic = not s_instance;
 
     // SE014: Унарний мінус для char (залишимо цю перевірку, бо це може бути неоднозначно)
-    // char negative_char = -c;
+    char negative_char = -c;
 
     // SE015: Розіменування не-вказівника
-    // deref a;
+    deref a;
 
     // SE016: Взяття адреси у літерала
-    // addr 100;
+    addr 100;
 
     return 0;
 }

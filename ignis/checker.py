@@ -117,6 +117,36 @@ class Checker(NodeVisitor):
                 return Type(Token(TokenType.KW_VOID, 'void'))
             return self.struct_info[struct_name]['fields'][field_name]
 
+        if isinstance(node, BinOp):
+            left_type = self._get_node_type(node.left)
+            right_type = self._get_node_type(node.right)
+            op = node.op.type
+
+            # Для арифметичних та побітових операцій, результат - int.
+            if op in (TokenType.PLUS, TokenType.MINUS, TokenType.MULTIPLY, TokenType.DIVIDE,
+                      TokenType.KW_BAND, TokenType.KW_BOR, TokenType.KW_BXOR):
+                # У майбутньому тут може бути логіка вибору "сильнішого" типу (напр., float > int)
+                return left_type
+
+            # Для операторів порівняння та логічних операцій, результат - завжди int (0 або 1).
+            if op in (TokenType.EQUAL, TokenType.NOT_EQUAL, TokenType.LESS, TokenType.GREATER,
+                      TokenType.LESS_EQUAL, TokenType.GREATER_EQUAL, TokenType.KW_AND, TokenType.KW_OR,
+                      TokenType.KW_XOR, TokenType.KW_NAND, TokenType.KW_NOR, TokenType.KW_XNOR):
+                return Type(Token(TokenType.KW_INT, 'int'))
+
+        if isinstance(node, UnaryOp):
+            expr_type = self._get_node_type(node.expr)
+            op = node.op.type
+
+            if op in (TokenType.PLUS, TokenType.MINUS, TokenType.KW_BNOT, TokenType.KW_NOT, TokenType.KW_NNOT):
+                return Type(Token(TokenType.KW_INT, 'int'))
+            if op == TokenType.KW_ADDR:
+                # Результат взяття адреси - це вказівник з рівнем +1
+                return Type(expr_type.token, pointer_level=expr_type.pointer_level + 1)
+            if op == TokenType.KW_DEREF:
+                # Результат розіменування - це базовий тип з рівнем -1
+                return Type(expr_type.token, pointer_level=expr_type.pointer_level - 1)
+
         # Заглушка для нереалізованих типів
         self.reporter.error(
             "SE999",
@@ -197,7 +227,7 @@ class Checker(NodeVisitor):
             assigned_type = self._get_node_type(node.assign_node)
 
             # Порівнюємо типи. repr(Type) дає нам рядок типу "int" або "ptr Point".
-            if repr(declared_type) != repr(assigned_type):
+            if repr(declared_type) != repr(assigned_type) and not (repr(declared_type) == "char" and repr(assigned_type) == "int"):
                 self.reporter.error(
                     "SE007",
                     f"Type mismatch: cannot assign type '{assigned_type}' to variable '{var_name}' of type '{declared_type}'.",
@@ -236,7 +266,7 @@ class Checker(NodeVisitor):
         # 3. Перевірка типів.
         left_type = self._get_node_type(node.left)
         right_type = self._get_node_type(node.right)
-        if repr(left_type) != repr(right_type):
+        if repr(left_type) != repr(right_type) and not (repr(left_type) == "char" and repr(right_type) == "int"):
             self.reporter.error(
                 "SE007",
                 f"Type mismatch: cannot assign type '{right_type}' to an expression of type '{left_type}'.",
@@ -277,6 +307,7 @@ class Checker(NodeVisitor):
         # Рекурсивно перевіряємо ліву та праву частини
         self.visit(node.left)
         self.visit(node.right)
+        self._get_node_type(node)
 
         left_type = self._get_node_type(node.left)
         right_type = self._get_node_type(node.right)
