@@ -9,7 +9,7 @@ from parser import Parser
 from checker import Checker
 from error import ErrorReporter
 
-def compile_source(source_code, file_path, reporter, target):
+def compile_source(source_code, file_path, reporter, target, issuicider):
     # 1. Lexer
     lexer = Lexer(source_code, reporter)
     # 2. Parser
@@ -17,8 +17,9 @@ def compile_source(source_code, file_path, reporter, target):
     ast = parser.parse()
     if reporter.had_error: return None
     # 2.5. Checker
-    checker = Checker(reporter)
-    checker.check(ast)
+    if not issuicider:
+        checker = Checker(reporter)
+        checker.check(ast)
     # if reporter.had_error: return None
 
     # ### MODIFIED ###: Вибір кодогенератора
@@ -48,6 +49,7 @@ def main():
     arg_parser.add_argument('-S', action='store_true', help="Stop after assembly generation (only for 'asm' target)")
     arg_parser.add_argument('-c', action='store_true', help="Stop after object file generation (only for 'asm' target)")
     arg_parser.add_argument('-k', '--keep-files', action='store_true', help='Keep intermediate files')
+    arg_parser.add_argument('--i-am-fucking-stupid-suicider', action='store_true', help='Disables most of errors checking. You\'re on your own now!')
     args = arg_parser.parse_args()
 
     input_path = Path(args.input_file)
@@ -87,7 +89,7 @@ def main():
             source_code = f.read()
 
         reporter = ErrorReporter(str(input_path), source_code.split('\n'))
-        generated_code = compile_source(source_code, str(input_path), reporter, args.target)
+        generated_code = compile_source(source_code, str(input_path), reporter, args.target, args.i_am_fucking_stupid_suicider)
         if reporter.had_error:
             print(f"\nCompilation failed due to previous errors.", file=sys.stderr)
             sys.exit(1)
