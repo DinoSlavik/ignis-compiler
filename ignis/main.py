@@ -9,10 +9,6 @@ from parser import Parser
 from checker import Checker
 from error import ErrorReporter
 
-
-# ### MODIFIED ###: Умовний імпорт кодогенераторів
-# Ми будемо імпортувати потрібний клас залежно від аргументів
-
 def compile_source(source_code, file_path, reporter, target):
     # 1. Lexer
     lexer = Lexer(source_code, reporter)

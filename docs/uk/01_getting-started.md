@@ -68,3 +68,6 @@ python3 ignis/main.py leet.ign -o leet
 # Компіляція через C++
 python3 ignis/main.py leet.ign --target cpp -o leet_cpp
 ```
+
+
+// TODO: Не знаю куди, але vessel звучить дуже класно, тож це можна додати кудись у компіляторі
