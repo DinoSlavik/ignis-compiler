@@ -44,6 +44,7 @@ class TokenType(Enum):
     KW_ADDR = 'addr'
     KW_DEREF = 'deref'
     #KW_ALLOC = 'alloc'
+    KW_SHIFT = 'shift'
     KW_NEW = 'new'
     KW_FREE = 'free'
     KW_STRUCT = 'struct'
@@ -140,6 +141,7 @@ RESERVED_KEYWORDS = {
     'nband': TokenType.KW_NBAND,
     'nbnot': TokenType.KW_NBNOT,
     'nbxor': TokenType.KW_NBXOR,
+    'shift': TokenType.KW_SHIFT,
 }
 
 

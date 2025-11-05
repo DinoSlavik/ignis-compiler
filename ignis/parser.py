@@ -108,14 +108,23 @@ class Parser:
             node = BinOp(left=node, op=token, right=self.term())
         return node
 
-    def comparison_expr(self):
+    def shift_expr(self):
         node = self.additive_expr()
+        while self.current_token.type == TokenType.KW_SHIFT:
+            op = self.current_token
+            self.eat(op.type)
+            right = self.additive_expr()
+            node = BinOp(left=node, op=op, right=right)
+        return node
+
+    def comparison_expr(self):
+        node = self.shift_expr()
         COMPARISON_OPS = (TokenType.EQUAL, TokenType.NOT_EQUAL, TokenType.LESS, TokenType.LESS_EQUAL, TokenType.GREATER,
                           TokenType.GREATER_EQUAL, TokenType.TYPE_EQUAL)
         if self.current_token.type in COMPARISON_OPS:
             op = self.current_token
             self.eat(op.type)
-            right = self.additive_expr()
+            right = self.shift_expr()
             node = BinOp(left=node, op=op, right=right)
         return node
 
