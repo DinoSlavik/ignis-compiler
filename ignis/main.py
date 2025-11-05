@@ -46,10 +46,10 @@ def main():
     arg_parser.add_argument('-o', '--output', type=str, help='Specify the output file name')
     arg_parser.add_argument('--target', type=str, choices=['asm', 'cpp'], default='asm',
                             help="Specify the compilation target: 'asm' (default) or 'cpp'")
+    arg_parser.add_argument('--i-am-fucking-stupid-suicider', action='store_true', help='Disables most of errors checking. You\'re on your own now!')
     arg_parser.add_argument('-S', action='store_true', help="Stop after assembly generation (only for 'asm' target)")
     arg_parser.add_argument('-c', action='store_true', help="Stop after object file generation (only for 'asm' target)")
     arg_parser.add_argument('-k', '--keep-files', action='store_true', help='Keep intermediate files')
-    arg_parser.add_argument('--i-am-fucking-stupid-suicider', action='store_true', help='Disables most of errors checking. You\'re on your own now!')
     args = arg_parser.parse_args()
 
     input_path = Path(args.input_file)

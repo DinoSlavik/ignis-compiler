@@ -214,7 +214,7 @@ class CodeGeneratorCpp(NodeVisitor):
         if op_type == TokenType.TYPE_EQUAL: return f"(typeid({left_expr}) == typeid({right_expr}))"
 
         if op_type == TokenType.KW_SHIFT:
-            if int(right_expr.replace('(', '').replace(')', '')) >= 0:
+            if '-' not in right_expr:
                 return f"({left_expr} >> {right_expr})"
             else:
                 return f"({left_expr} << {right_expr.replace('-', '')})"
