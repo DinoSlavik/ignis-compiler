@@ -7,7 +7,7 @@ int main() {
     println(i);
     i += 1;
     println(i);
-    i -= ++i;
+    i -= 5;
     println(i);
 
     return 0;
