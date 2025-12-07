@@ -247,6 +247,7 @@ class Parser:
 
     def variable_declaration(self):
         is_mutable = False
+        if self.current_token.type == TokenType.KW_IMMUT: is_mutable = False; self.eat(TokenType.KW_IMMUT)
         if self.current_token.type == TokenType.KW_MUT: is_mutable = True; self.eat(TokenType.KW_MUT)
         type_node = self.type_spec()
         var_token = self.current_token
@@ -297,7 +298,7 @@ class Parser:
             return Free(expr_node)
 
         node = None
-        is_var_decl = (token_type in (TokenType.KW_INT, TokenType.KW_CHAR, TokenType.KW_MUT, TokenType.KW_PTR) or
+        is_var_decl = (token_type in (TokenType.KW_INT, TokenType.KW_CHAR, TokenType.KW_MUT, TokenType.KW_IMMUT, TokenType.KW_PTR) or
                        (token_type == TokenType.IDENTIFIER and self.peek_token.type == TokenType.IDENTIFIER))
         if is_var_decl:
             node = self.variable_declaration()

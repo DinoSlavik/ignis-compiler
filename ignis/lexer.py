@@ -38,6 +38,7 @@ class TokenType(Enum):
     KW_VOID = 'void'
     KW_CHAR = 'char'
     KW_MUT = 'mut'
+    KW_IMMUT = 'immut'
     KW_CONST = 'const'
     KW_RETURN = 'return'
     KW_IF = 'if'
@@ -106,6 +107,7 @@ RESERVED_KEYWORDS = {
     'void': TokenType.KW_VOID,
     'char': TokenType.KW_CHAR,
     'mut': TokenType.KW_MUT,
+    'immut': TokenType.KW_IMMUT,
     'const': TokenType.KW_CONST,
     'return': TokenType.KW_RETURN,
     'struct': TokenType.KW_STRUCT,
