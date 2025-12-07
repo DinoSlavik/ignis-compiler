@@ -103,7 +103,8 @@ class Parser:
 
     def additive_expr(self):
         node = self.term()
-        while self.current_token.type in (TokenType.PLUS, TokenType.MINUS):
+        ADDITIVE_OPS = (TokenType.PLUS, TokenType.MINUS)
+        while self.current_token.type in ADDITIVE_OPS:
             token = self.current_token
             self.eat(token.type)
             node = BinOp(left=node, op=token, right=self.term())
@@ -272,7 +273,12 @@ class Parser:
 
     def assignment_statement(self, left_node):
         op = self.current_token
-        self.eat(TokenType.ASSIGN)
+        if op.type in [
+            TokenType.ASSIGN,
+            TokenType.PLUS_ASSIGN, TokenType.MINUS_ASSIGN,
+            TokenType.MULTIPLY_ASSIGN, TokenType.DIVIDE_ASSIGN, TokenType.MODULO_ASSIGN
+        ]:
+            self.eat(op.type)
         right = self.expr()
         return Assign(left_node, op, right)
 

@@ -375,7 +375,7 @@ class CodeGeneratorCpp(NodeVisitor):
 
             right_expr = f"reinterpret_cast<{pointer_type_str}>({right_expr})"
 
-        return f"{left_expr} = {right_expr}"
+        return f"{left_expr} {node.op.value} {right_expr}"
 
     def visit_Num(self, node: Num):
         return str(node.value)

@@ -27,6 +27,11 @@ class TokenType(Enum):
     LESS_EQUAL = '<='
     GREATER_EQUAL = '>='
     TYPE_EQUAL = '==='
+    PLUS_ASSIGN = '+='
+    MINUS_ASSIGN = '-='
+    MULTIPLY_ASSIGN = '*='
+    DIVIDE_ASSIGN = '/='
+    MODULO_ASSIGN = '%='
 
     # Keywords
     KW_INT = 'int'
@@ -285,6 +290,18 @@ class Lexer:
             # Operators
             if self.current_char == '=' and self.peek() == '=' and self.peek(2) == '=':
                 self.advance(); self.advance(); self.advance(); return Token(TokenType.TYPE_EQUAL, '===', line, col)
+            ## Additive assign
+            if self.current_char == '+' and self.peek() == '=':
+                self.advance(); self.advance(); return Token(TokenType.PLUS_ASSIGN, '+=', line, col)
+            if self.current_char == '-' and self.peek() == '=':
+                self.advance(); self.advance(); return Token(TokenType.MINUS_ASSIGN, '-=', line, col)
+            if self.current_char == '*' and self.peek() == '=':
+                self.advance(); self.advance(); return Token(TokenType.MULTIPLY_ASSIGN, '*=', line, col)
+            if self.current_char == '/' and self.peek() == '=':
+                self.advance(); self.advance(); return Token(TokenType.DIVIDE_ASSIGN, '/=', line, col)
+            if self.current_char == '%' and self.peek() == '=':
+                self.advance(); self.advance(); return Token(TokenType.MODULO_ASSIGN, '%=', line, col)
+            ## Logical
             if self.current_char == '=' and self.peek() == '=':
                 self.advance(); self.advance(); return Token(TokenType.EQUAL, '==', line, col)
             if self.current_char == '!' and self.peek() == '=':
@@ -293,6 +310,7 @@ class Lexer:
                 self.advance(); self.advance(); return Token(TokenType.LESS_EQUAL, '<=', line, col)
             if self.current_char == '>' and self.peek() == '=':
                 self.advance(); self.advance(); return Token(TokenType.GREATER_EQUAL, '>=', line, col)
+            ## Unary additive
             if self.current_char == '+' and self.peek() == '+':
                 self.advance(); self.advance(); return Token(TokenType.PLUS_PLUS, '++', line, col)
             if self.current_char == '-' and self.peek() == '-':
