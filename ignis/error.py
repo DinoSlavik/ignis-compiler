@@ -1,3 +1,5 @@
+import sys
+
 class ErrorReporter:
     def __init__(self, file_path, source_lines):
         self.file_path = file_path
@@ -35,7 +37,8 @@ class ErrorReporter:
         full_message = f"{level} {header}\n{token_text}\n{location}\n\n{snippet}"
 
         if level == "Error":
-            raise Exception(f'Compiler error:\n{full_message}')
+            print(f'\nCompiler error:\n{full_message}', file=sys.stderr)
+            # print(f'\nCompiler error:\n{full_message}')
         else:
             print(f"{full_message}\n")
 

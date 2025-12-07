@@ -8,7 +8,7 @@ class FunctionDecl(AST):
     def __init__(self, type_node, func_name, params, body): self.type_node, self.func_name, self.params, self.body = type_node, func_name, params, body
     def __repr__(self): return f"  FunctionDecl(name='{self.func_name}', params={self.params}, body={self.body})"
 class StructDef(AST):
-    def __init__(self, name, fields): self.name, self.fields = name, fields
+    def __init__(self, name_token, fields): self.name_token, self.fields = name_token, fields
     def __repr__(self): return f"  StructDef(name='{self.name}', fields={self.fields})"
 class Param(AST):
     def __init__(self, type_node, var_node): self.type_node, self.var_node = type_node, var_node

@@ -1,0 +1,14 @@
+void println(int n) {
+    print(n); putchar('\n');
+}
+
+int main() {
+    mut int i = 2;
+    println(i);
+    i += 1;
+    println(i);
+    i -= 5;
+    println(i);
+
+    return 0;
+}

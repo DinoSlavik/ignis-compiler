@@ -102,8 +102,8 @@ class CodeGeneratorCpp(NodeVisitor):
         writer.add_line('')
         for decl in node.declarations:
             if isinstance(decl, StructDef):
-                self.struct_info[decl.name] = {field.var_node.value: field.type_node for field in decl.fields}
-                writer.add_line(f"struct {decl.name};")
+                self.struct_info[decl.name_token.value] = {field.var_node.value: field.type_node for field in decl.fields}
+                writer.add_line(f"struct {decl.name_token.value};")
         writer.add_line('')
         for decl in node.declarations:
             self.visit(decl, writer)
@@ -157,8 +157,6 @@ class CodeGeneratorCpp(NodeVisitor):
 
     def visit_VarDecl(self, node: VarDecl, writer: CppWriter):
         var_name = node.var_node.value
-        if var_name in self.symbol_table:
-            self.error("E008", f"Variable '{var_name}' is already declared in this scope.", node)
         self.symbol_table[var_name] = node.type_node
         is_const_string = isinstance(node.assign_node, StringLiteral)
         is_mut = node.is_mutable
@@ -195,7 +193,8 @@ class CodeGeneratorCpp(NodeVisitor):
             TokenType.LESS: '<', TokenType.LESS_EQUAL: '<=',
             TokenType.GREATER: '>', TokenType.GREATER_EQUAL: '>=',
 
-            TokenType.PLUS: '+', TokenType.MINUS: '-', TokenType.MULTIPLY: '*', TokenType.DIVIDE: '/'
+            TokenType.PLUS: '+', TokenType.MINUS: '-',
+            TokenType.MULTIPLY: '*', TokenType.DIVIDE: '/', TokenType.MODULO: '%'
         }
 
         if op_type in op_map:
@@ -213,7 +212,14 @@ class CodeGeneratorCpp(NodeVisitor):
         if op_type == TokenType.KW_NBXOR: return f"(~({left_expr} ^ {right_expr}))"
 
         # Using typeid() from typeinfo because cpp doesn't support dedicated type comparison operator
-        if op_type == TokenType.TYPE_EQUAL: return f"(typeid(left_expr) == typeid(right_expr))"
+        if op_type == TokenType.TYPE_EQUAL: return f"(typeid({left_expr}) == typeid({right_expr}))"
+
+        if op_type == TokenType.KW_SHIFT:
+            if '-' not in right_expr:
+                return f"({left_expr} >> {right_expr})"
+            else:
+                return f"({left_expr} << {right_expr.replace('-', '')})"
+
 
         return f"/* Binary Operator '{op_type}' C++ generation not implemented */"
 
@@ -230,7 +236,7 @@ class CodeGeneratorCpp(NodeVisitor):
         writer.add_line(f"constexpr {var_type} {var_name} = {value_expr};")
 
     def visit_StructDef(self, node: StructDef, writer: CppWriter):
-        writer.add_line(f"struct {node.name}")
+        writer.add_line(f"struct {node.name_token.value}")
         writer.enter_block()
         for field in node.fields:
             field_type = self._map_type(field.type_node)
@@ -369,7 +375,7 @@ class CodeGeneratorCpp(NodeVisitor):
 
             right_expr = f"reinterpret_cast<{pointer_type_str}>({right_expr})"
 
-        return f"{left_expr} = {right_expr}"
+        return f"{left_expr} {node.op.value} {right_expr}"
 
     def visit_Num(self, node: Num):
         return str(node.value)
@@ -406,9 +412,10 @@ class CodeGeneratorCpp(NodeVisitor):
         #     return f"(*{expr})"
 
         op_map = {
-            TokenType.KW_DEREF: '(*{expr})', TokenType.KW_ADDR: '(&{expr})',
-            TokenType.KW_NOT: '(!{expr})', TokenType.KW_BNOT: '(~{expr})',
-            TokenType.MINUS: '(-{expr})', TokenType.PLUS: '(+{expr})'
+            TokenType.KW_DEREF: "(*{expr})", TokenType.KW_ADDR: "(&{expr})",
+            TokenType.KW_NOT: "(!{expr})", TokenType.KW_BNOT: "(~{expr})",
+            TokenType.MINUS: "(-{expr})", TokenType.PLUS: "(+{expr})",
+            TokenType.PLUS_PLUS: "(++{expr})", TokenType.MINUS_MINUS: "(--{expr})",
         }
 
         if op_type in op_map:

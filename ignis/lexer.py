@@ -7,6 +7,7 @@ class TokenType(Enum):
     MINUS = '-'
     MULTIPLY = '*'
     DIVIDE = '/'
+    MODULO = '%'
     LPAREN = '('
     RPAREN = ')'
     LBRACE = '{'
@@ -19,17 +20,25 @@ class TokenType(Enum):
     DOT = '.'
 
     # Multi-character tokens
+    PLUS_PLUS = '++'
+    MINUS_MINUS = '--'
     EQUAL = '=='
     NOT_EQUAL = '!='
     LESS_EQUAL = '<='
     GREATER_EQUAL = '>='
     TYPE_EQUAL = '==='
+    PLUS_ASSIGN = '+='
+    MINUS_ASSIGN = '-='
+    MULTIPLY_ASSIGN = '*='
+    DIVIDE_ASSIGN = '/='
+    MODULO_ASSIGN = '%='
 
     # Keywords
     KW_INT = 'int'
     KW_VOID = 'void'
     KW_CHAR = 'char'
     KW_MUT = 'mut'
+    KW_IMMUT = 'immut'
     KW_CONST = 'const'
     KW_RETURN = 'return'
     KW_IF = 'if'
@@ -44,6 +53,7 @@ class TokenType(Enum):
     KW_ADDR = 'addr'
     KW_DEREF = 'deref'
     #KW_ALLOC = 'alloc'
+    KW_SHIFT = 'shift'
     KW_NEW = 'new'
     KW_FREE = 'free'
     KW_STRUCT = 'struct'
@@ -97,6 +107,7 @@ RESERVED_KEYWORDS = {
     'void': TokenType.KW_VOID,
     'char': TokenType.KW_CHAR,
     'mut': TokenType.KW_MUT,
+    'immut': TokenType.KW_IMMUT,
     'const': TokenType.KW_CONST,
     'return': TokenType.KW_RETURN,
     'struct': TokenType.KW_STRUCT,
@@ -140,6 +151,7 @@ RESERVED_KEYWORDS = {
     'nband': TokenType.KW_NBAND,
     'nbnot': TokenType.KW_NBNOT,
     'nbxor': TokenType.KW_NBXOR,
+    'shift': TokenType.KW_SHIFT,
 }
 
 
@@ -280,6 +292,18 @@ class Lexer:
             # Operators
             if self.current_char == '=' and self.peek() == '=' and self.peek(2) == '=':
                 self.advance(); self.advance(); self.advance(); return Token(TokenType.TYPE_EQUAL, '===', line, col)
+            ## Additive assign
+            if self.current_char == '+' and self.peek() == '=':
+                self.advance(); self.advance(); return Token(TokenType.PLUS_ASSIGN, '+=', line, col)
+            if self.current_char == '-' and self.peek() == '=':
+                self.advance(); self.advance(); return Token(TokenType.MINUS_ASSIGN, '-=', line, col)
+            if self.current_char == '*' and self.peek() == '=':
+                self.advance(); self.advance(); return Token(TokenType.MULTIPLY_ASSIGN, '*=', line, col)
+            if self.current_char == '/' and self.peek() == '=':
+                self.advance(); self.advance(); return Token(TokenType.DIVIDE_ASSIGN, '/=', line, col)
+            if self.current_char == '%' and self.peek() == '=':
+                self.advance(); self.advance(); return Token(TokenType.MODULO_ASSIGN, '%=', line, col)
+            ## Logical
             if self.current_char == '=' and self.peek() == '=':
                 self.advance(); self.advance(); return Token(TokenType.EQUAL, '==', line, col)
             if self.current_char == '!' and self.peek() == '=':
@@ -288,6 +312,11 @@ class Lexer:
                 self.advance(); self.advance(); return Token(TokenType.LESS_EQUAL, '<=', line, col)
             if self.current_char == '>' and self.peek() == '=':
                 self.advance(); self.advance(); return Token(TokenType.GREATER_EQUAL, '>=', line, col)
+            ## Unary additive
+            if self.current_char == '+' and self.peek() == '+':
+                self.advance(); self.advance(); return Token(TokenType.PLUS_PLUS, '++', line, col)
+            if self.current_char == '-' and self.peek() == '-':
+                self.advance(); self.advance(); return Token(TokenType.MINUS_MINUS, '--', line, col)
             try:
                 token_type = TokenType(self.current_char)
                 token = Token(token_type, token_type.value, line, col); self.advance()
