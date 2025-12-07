@@ -83,6 +83,7 @@ class Parser:
         token = self.current_token
         UNARY_OPS = (
             TokenType.PLUS, TokenType.MINUS,
+            TokenType.PLUS_PLUS, TokenType.MINUS_MINUS,
             TokenType.KW_NOT, TokenType.KW_BNOT,
             TokenType.KW_NNOT, TokenType.KW_NBNOT,
             TokenType.KW_ADDR, TokenType.KW_DEREF

@@ -19,6 +19,8 @@ class TokenType(Enum):
     DOT = '.'
 
     # Multi-character tokens
+    PLUS_PLUS = '++'
+    MINUS_MINUS = '--'
     EQUAL = '=='
     NOT_EQUAL = '!='
     LESS_EQUAL = '<='
@@ -290,6 +292,10 @@ class Lexer:
                 self.advance(); self.advance(); return Token(TokenType.LESS_EQUAL, '<=', line, col)
             if self.current_char == '>' and self.peek() == '=':
                 self.advance(); self.advance(); return Token(TokenType.GREATER_EQUAL, '>=', line, col)
+            if self.current_char == '+' and self.peek() == '+':
+                self.advance(); self.advance(); return Token(TokenType.PLUS_PLUS, '++', line, col)
+            if self.current_char == '-' and self.peek() == '-':
+                self.advance(); self.advance(); return Token(TokenType.MINUS_MINUS, '--', line, col)
             try:
                 token_type = TokenType(self.current_char)
                 token = Token(token_type, token_type.value, line, col); self.advance()

@@ -411,9 +411,10 @@ class CodeGeneratorCpp(NodeVisitor):
         #     return f"(*{expr})"
 
         op_map = {
-            TokenType.KW_DEREF: '(*{expr})', TokenType.KW_ADDR: '(&{expr})',
-            TokenType.KW_NOT: '(!{expr})', TokenType.KW_BNOT: '(~{expr})',
-            TokenType.MINUS: '(-{expr})', TokenType.PLUS: '(+{expr})'
+            TokenType.KW_DEREF: "(*{expr})", TokenType.KW_ADDR: "(&{expr})",
+            TokenType.KW_NOT: "(!{expr})", TokenType.KW_BNOT: "(~{expr})",
+            TokenType.MINUS: "(-{expr})", TokenType.PLUS: "(+{expr})",
+            TokenType.PLUS_PLUS: "(++{expr})", TokenType.MINUS_MINUS: "(--{expr})",
         }
 
         if op_type in op_map:

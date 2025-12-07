@@ -1,0 +1,16 @@
+int main() {
+    mut int i = 0;
+    while (i < 10) {
+        print(i); putchar('\n');
+        ++i;
+    }
+
+    putchar('\n'); putchar('\n');
+
+    while (i > 0) {
+        print(i); putchar('\n');
+        --i;
+    }
+
+    return 0;
+}
