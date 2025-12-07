@@ -193,7 +193,8 @@ class CodeGeneratorCpp(NodeVisitor):
             TokenType.LESS: '<', TokenType.LESS_EQUAL: '<=',
             TokenType.GREATER: '>', TokenType.GREATER_EQUAL: '>=',
 
-            TokenType.PLUS: '+', TokenType.MINUS: '-', TokenType.MULTIPLY: '*', TokenType.DIVIDE: '/'
+            TokenType.PLUS: '+', TokenType.MINUS: '-',
+            TokenType.MULTIPLY: '*', TokenType.DIVIDE: '/', TokenType.MODULO: '%'
         }
 
         if op_type in op_map:

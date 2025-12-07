@@ -7,6 +7,7 @@ class TokenType(Enum):
     MINUS = '-'
     MULTIPLY = '*'
     DIVIDE = '/'
+    MODULO = '%'
     LPAREN = '('
     RPAREN = ')'
     LBRACE = '{'

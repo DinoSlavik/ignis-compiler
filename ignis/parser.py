@@ -95,7 +95,7 @@ class Parser:
 
     def term(self):
         node = self.unary_expr()
-        while self.current_token.type in (TokenType.MULTIPLY, TokenType.DIVIDE):
+        while self.current_token.type in (TokenType.MULTIPLY, TokenType.DIVIDE, TokenType.MODULO):
             token = self.current_token
             self.eat(token.type)
             node = BinOp(left=node, op=token, right=self.unary_expr())
